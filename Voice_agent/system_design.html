@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>JARVIS — System Design Document</title>
+<style>
+  :root{
+    --blue:#0A84FF;
+    --green:#30D158;
+    --red:#FF453A;
+    --bg:#0D1117;
+    --bg2:#161B22;
+    --bg3:#1C2128;
+    --border:#30363D;
+    --text:#E6EDF3;
+    --muted:#8B949E;
+    --blue-dim:#0A84FF22;
+    --green-dim:#30D15822;
+    --red-dim:#FF453A22;
+    --gold:#FFD60A;
+    --gold-dim:#FFD60A22;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;line-height:1.6;}
+
+  nav{position:sticky;top:0;z-index:100;background:rgba(13,17,23,.94);backdrop-filter:blur(14px);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:1.6rem;padding:.75rem 2rem;flex-wrap:wrap;}
+  nav .logo{font-size:1.05rem;font-weight:700;color:var(--blue);letter-spacing:.05em;margin-right:.5rem;}
+  nav a{color:var(--muted);text-decoration:none;font-size:.82rem;transition:color .2s;}
+  nav a:hover{color:var(--text);}
+
+  .hero{background:linear-gradient(135deg,#0D1117 0%,#071a30 45%,#0a1f0f 100%);padding:5rem 2rem 4rem;text-align:center;position:relative;overflow:hidden;}
+  .hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 70% 50% at 50% 0%,rgba(10,132,255,.12),transparent);}
+  .hero h1{font-size:3rem;font-weight:800;background:linear-gradient(135deg,var(--blue) 0%,var(--green) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;position:relative;}
+  .hero .sub{color:var(--muted);font-size:1.05rem;margin-top:.9rem;position:relative;}
+  .hero .status-pill{display:inline-block;background:var(--green-dim);border:1px solid var(--green);color:var(--green);border-radius:999px;padding:.3rem 1rem;font-size:.82rem;font-weight:700;margin-top:1.2rem;position:relative;}
+  .badge-row{display:flex;flex-wrap:wrap;gap:.55rem;justify-content:center;margin-top:1.2rem;position:relative;}
+  .badge{padding:.22rem .7rem;border-radius:999px;font-size:.73rem;font-weight:600;border:1px solid;}
+  .badge.blue{color:var(--blue);border-color:var(--blue);background:var(--blue-dim);}
+  .badge.green{color:var(--green);border-color:var(--green);background:var(--green-dim);}
+  .badge.gold{color:var(--gold);border-color:var(--gold);background:var(--gold-dim);}
+
+  main{max-width:1200px;margin:0 auto;padding:2rem;}
+  section{margin-bottom:4rem;}
+  h2{font-size:1.55rem;font-weight:700;color:var(--text);margin-bottom:1.5rem;padding-bottom:.5rem;border-bottom:2px solid var(--border);display:flex;align-items:center;gap:.6rem;}
+  h2 .ico{font-size:1.35rem;}
+  h3{font-size:1.05rem;font-weight:600;color:var(--blue);margin-bottom:.7rem;}
+  p{color:var(--muted);margin-bottom:.75rem;}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1.2rem;}
+  .card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:1.35rem;transition:border-color .2s,transform .18s;}
+  .card:hover{border-color:var(--blue);transform:translateY(-2px);}
+  .card h3{font-size:.93rem;margin-bottom:.45rem;}
+  .card p{font-size:.84rem;margin:0;}
+  .card .tag{display:inline-block;font-size:.68rem;font-weight:700;padding:.14rem .48rem;border-radius:4px;margin-bottom:.55rem;}
+  .tag-blue{background:var(--blue-dim);color:var(--blue);}
+  .tag-green{background:var(--green-dim);color:var(--green);}
+  .tag-red{background:var(--red-dim);color:var(--red);}
+  .tag-gold{background:var(--gold-dim);color:var(--gold);}
+
+  .tbl-wrap{overflow-x:auto;border-radius:12px;border:1px solid var(--border);}
+  table{width:100%;border-collapse:collapse;font-size:.87rem;}
+  thead tr{background:var(--bg3);}
+  th{padding:.85rem 1.05rem;text-align:left;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);}
+  td{padding:.8rem 1.05rem;border-bottom:1px solid var(--border);color:var(--text);}
+  tr:last-child td{border-bottom:none;}
+  tr:hover td{background:var(--bg3);}
+  code{background:var(--bg3);color:var(--green);padding:.1rem .38rem;border-radius:4px;font-family:'Cascadia Code','Fira Code',monospace;font-size:.81rem;}
+
+  .diagram{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:2rem;overflow-x:auto;}
+  svg text{font-family:'Segoe UI',system-ui,sans-serif;}
+
+  .progress-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;}
+  .prog-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:1.35rem;}
+  .prog-card h3{font-size:1rem;margin-bottom:1rem;}
+  .prog-item{display:flex;align-items:flex-start;gap:.55rem;margin-bottom:.65rem;font-size:.87rem;}
+  .prog-item .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:.35rem;}
+  .dot-green{background:var(--green);}
+  .dot-red{background:var(--red);}
+  .dot-gold{background:var(--gold);}
+
+  .flow{display:flex;align-items:center;flex-wrap:wrap;gap:.45rem;margin:1rem 0;}
+  .fbox{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:.42rem .85rem;font-size:.81rem;color:var(--text);}
+  .fbox.blue{border-color:var(--blue);color:var(--blue);background:var(--blue-dim);}
+  .fbox.green{border-color:var(--green);color:var(--green);background:var(--green-dim);}
+  .fbox.red{border-color:var(--red);color:var(--red);background:var(--red-dim);}
+  .fbox.gold{border-color:var(--gold);color:var(--gold);background:var(--gold-dim);}
+  .arrow{color:var(--muted);font-size:1.1rem;}
+
+  .comp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:1.2rem;}
+  .comp-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:1.45rem;}
+  .comp-card .file{font-size:.79rem;color:var(--green);font-family:monospace;margin-bottom:.55rem;}
+  .comp-card ul{list-style:none;margin-top:.45rem;}
+  .comp-card ul li{font-size:.84rem;color:var(--muted);padding:.22rem 0;border-bottom:1px solid var(--border);display:flex;gap:.45rem;}
+  .comp-card ul li:last-child{border-bottom:none;}
+  .comp-card ul li::before{content:'›';color:var(--blue);}
+
+  .metrics{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:1rem;}
+  .metric{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:1.15rem;text-align:center;}
+  .metric .val{font-size:1.75rem;font-weight:800;color:var(--blue);}
+  .metric .val.green{color:var(--green);}
+  .metric .lbl{font-size:.76rem;color:var(--muted);margin-top:.2rem;}
+
+  .cfg{display:grid;grid-template-columns:1fr 1fr;gap:.9rem;}
+  .cfg-item{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:.85rem 1.05rem;display:flex;justify-content:space-between;align-items:center;font-size:.87rem;}
+  .cfg-item .key{color:var(--muted);}
+  .cfg-item .v{color:var(--green);font-family:monospace;}
+
+  /* Journey timeline */
+  .timeline{position:relative;padding-left:2rem;}
+  .timeline::before{content:'';position:absolute;left:.45rem;top:0;bottom:0;width:2px;background:var(--border);}
+  .tl-item{position:relative;margin-bottom:2rem;}
+  .tl-dot{position:absolute;left:-1.67rem;top:.3rem;width:14px;height:14px;border-radius:50%;border:2px solid;}
+  .tl-dot.red{background:var(--red-dim);border-color:var(--red);}
+  .tl-dot.green{background:var(--green-dim);border-color:var(--green);}
+  .tl-dot.blue{background:var(--blue-dim);border-color:var(--blue);}
+  .tl-dot.gold{background:var(--gold-dim);border-color:var(--gold);}
+  .tl-label{font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:.35rem;}
+  .tl-title{font-size:1rem;font-weight:600;margin-bottom:.4rem;}
+  .tl-body{font-size:.87rem;color:var(--muted);}
+  .tl-code{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:.8rem 1rem;margin-top:.6rem;font-family:monospace;font-size:.8rem;color:var(--muted);}
+  .tl-code span.bad{color:var(--red);}
+  .tl-code span.good{color:var(--green);}
+
+  /* What we built */
+  .built-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1.2rem;}
+  .built-card{background:linear-gradient(135deg,var(--bg2),var(--bg3));border:1px solid var(--border);border-radius:16px;padding:1.6rem;position:relative;overflow:hidden;}
+  .built-card::before{content:'';position:absolute;top:-30px;right:-30px;width:80px;height:80px;border-radius:50%;opacity:.08;}
+  .built-card.b1::before{background:var(--blue);}
+  .built-card.b2::before{background:var(--green);}
+  .built-card.b3::before{background:var(--red);}
+  .built-card.b4::before{background:var(--gold);}
+  .built-card .icon{font-size:2rem;margin-bottom:.8rem;}
+  .built-card h3{font-size:1rem;font-weight:700;color:var(--text);margin-bottom:.5rem;}
+  .built-card p{font-size:.85rem;color:var(--muted);margin:0;}
+
+  .final-banner{background:linear-gradient(135deg,#071a30,#0a1f0f);border:1px solid var(--green);border-radius:20px;padding:3rem 2rem;text-align:center;margin-top:2rem;}
+  .final-banner h2{border:none;justify-content:center;font-size:2rem;margin-bottom:1rem;}
+  .final-banner p{font-size:1rem;max-width:700px;margin:0 auto .75rem;}
+
+  footer{text-align:center;padding:2.5rem;color:var(--muted);font-size:.81rem;border-top:1px solid var(--border);}
+
+  @media(max-width:700px){
+    .hero h1{font-size:2rem;}
+    .progress-grid,.cfg{grid-template-columns:1fr;}
+    nav a{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">🎙️ JARVIS</div>
+  <a href="#overview">Overview</a>
+  <a href="#stack">Tech Stack</a>
+  <a href="#hld">Architecture</a>
+  <a href="#lld">Low-Level</a>
+  <a href="#components">Components</a>
+  <a href="#config">Config</a>
+  <a href="#progress">Progress</a>
+  <a href="#journey">API Journey</a>
+  <a href="#bugfixes">Bug Fixes</a>
+  <a href="#built">What We Built</a>
+</nav>
+
+<div class="hero">
+  <h1>JARVIS — Real-Time Voice AI Agent</h1>
+  <p class="sub">System Design Document &nbsp;·&nbsp; Last updated 2026-04-27 &nbsp;·&nbsp; Python 3.12 · Groq · Streamlit</p>
+  <div class="status-pill">✅ PROJECT COMPLETE — Fully Working</div>
+  <div class="badge-row">
+    <span class="badge blue">Python 3.12</span>
+    <span class="badge blue">Groq API</span>
+    <span class="badge blue">whisper-large-v3</span>
+    <span class="badge blue">llama-3.3-70b-versatile</span>
+    <span class="badge green">Streamlit</span>
+    <span class="badge green">PyAudio</span>
+    <span class="badge green">pyttsx3</span>
+    <span class="badge green">asyncio + threading</span>
+    <span class="badge gold">STT ✓</span>
+    <span class="badge gold">LLM ✓</span>
+    <span class="badge gold">TTS ✓</span>
+    <span class="badge gold">Echo-Free ✓</span>
+  </div>
+</div>
+
+<main>
+
+<!-- ── OVERVIEW ──────────────────────────────────────────────────────────── -->
+<section id="overview">
+  <h2><span class="ico">📋</span> Project Overview</h2>
+  <div class="cards">
+    <div class="card">
+      <div class="tag tag-blue">Purpose</div>
+      <h3>What is JARVIS?</h3>
+      <p>A fully working real-time voice AI agent. You speak → it listens → it thinks → it speaks back. Complete end-to-end voice conversation with an LLM, no typing required.</p>
+    </div>
+    <div class="card">
+      <div class="tag tag-green">Use Case</div>
+      <h3>Demo Booking Assistant</h3>
+      <p>Handles inbound voice queries: schedule product demos, check slot availability, and provide date/time — all via natural spoken conversation.</p>
+    </div>
+    <div class="card">
+      <div class="tag tag-blue">Interface</div>
+      <h3>Streamlit Web UI</h3>
+      <p>Browser-based control panel with live transcript display, session stats, real-time status indicator (Listening / Thinking / Speaking), and 0.7 s auto-refresh loop.</p>
+    </div>
+    <div class="card">
+      <div class="tag tag-green">STT</div>
+      <h3>Groq Whisper</h3>
+      <p>Raw PCM audio from mic is wrapped in WAV and sent to Groq's <code>whisper-large-v3</code> — the most accurate open STT model, with Groq's sub-200 ms inference speed.</p>
+    </div>
+    <div class="card">
+      <div class="tag tag-blue">LLM</div>
+      <h3>Groq LLaMA 3.3</h3>
+      <p><code>llama-3.3-70b-versatile</code> powers all conversation. Full multi-turn chat history maintained in-memory. Replies capped at 256 tokens for natural voice pacing.</p>
+    </div>
+    <div class="card">
+      <div class="tag tag-green">TTS</div>
+      <h3>pyttsx3 SAPI5</h3>
+      <p>Windows SAPI5 text-to-speech via pyttsx3 — fully offline, zero API cost, low latency. Voice rate tuned to 165 wpm for natural spoken cadence.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── METRICS ───────────────────────────────────────────────────────────── -->
+<section>
+  <h2><span class="ico">📊</span> Project Metrics</h2>
+  <div class="metrics">
+    <div class="metric"><div class="val green">100%</div><div class="lbl">Completion</div></div>
+    <div class="metric"><div class="val">8</div><div class="lbl">Source Files</div></div>
+    <div class="metric"><div class="val">3</div><div class="lbl">Registered Tools</div></div>
+    <div class="metric"><div class="val">3</div><div class="lbl">APIs Used</div></div>
+    <div class="metric"><div class="val">16kHz</div><div class="lbl">Mic Sample Rate</div></div>
+    <div class="metric"><div class="val">800</div><div class="lbl">RMS Threshold</div></div>
+    <div class="metric"><div class="val">5</div><div class="lbl">Min Speech Frames</div></div>
+    <div class="metric"><div class="val">20</div><div class="lbl">Max History Turns</div></div>
+  </div>
+</section>
+
+<!-- ── TECH STACK ────────────────────────────────────────────────────────── -->
+<section id="stack">
+  <h2><span class="ico">🛠️</span> Technology Stack — Full Detail</h2>
+  <h3 style="margin-bottom:1rem;">Core Runtime (Final)</h3>
+  <div class="tbl-wrap" style="margin-bottom:2rem;">
+    <table>
+      <thead><tr><th>Layer</th><th>Technology</th><th>Version</th><th>Role</th><th>Why Chosen</th></tr></thead>
+      <tbody>
+        <tr><td>Language</td><td>Python</td><td>3.12</td><td>Entire backend + orchestration</td><td>Best AI/ML ecosystem; async primitives; cross-platform audio</td></tr>
+        <tr><td>STT</td><td>Groq Whisper</td><td>whisper-large-v3</td><td>Speech → text transcription</td><td>Purpose-built STT; most accurate open model; Groq's ultra-low latency</td></tr>
+        <tr><td>LLM</td><td>Groq LLaMA</td><td>llama-3.3-70b-versatile</td><td>Conversation + reasoning</td><td>70B parameters; excellent instruction following; multi-turn chat; fast on Groq</td></tr>
+        <tr><td>TTS</td><td>pyttsx3</td><td>2.99</td><td>Text → speech playback</td><td>Fully offline; Windows SAPI5; zero cost; instant response</td></tr>
+        <tr><td>UI Framework</td><td>Streamlit</td><td>≥1.32</td><td>Web frontend</td><td>Zero-JS; session_state; built-in st.rerun()</td></tr>
+        <tr><td>Audio I/O</td><td>PyAudio</td><td>0.2.14</td><td>Mic capture (16kHz PCM)</td><td>Direct PortAudio bindings; low-latency PCM streaming</td></tr>
+        <tr><td>Audio DSP</td><td>audioop</td><td>stdlib</td><td>RMS energy detection</td><td>C-extension speed; no extra dep; Int16 PCM RMS</td></tr>
+        <tr><td>Groq SDK</td><td>groq</td><td>1.2.0</td><td>API client for STT + LLM</td><td>Official SDK; audio.transcriptions + chat.completions</td></tr>
+        <tr><td>Env Config</td><td>python-dotenv</td><td>latest</td><td>.env loading</td><td>12-factor compliance; secrets out of code</td></tr>
+        <tr><td>Async</td><td>asyncio</td><td>stdlib 3.12</td><td>Event loop in agent thread</td><td>Non-blocking I/O; await-based pipeline steps</td></tr>
+        <tr><td>Threading</td><td>threading</td><td>stdlib</td><td>Agent + audio threads</td><td>Isolates blocking audio I/O from Streamlit main thread</td></tr>
+        <tr><td>Thread Queues</td><td>queue.Queue</td><td>stdlib</td><td>Thread-safe transcript + audio FIFO</td><td>Decouples background agent from Streamlit session_state</td></tr>
+        <tr><td>Data Model</td><td>dataclasses</td><td>stdlib</td><td>Turn struct in ConversationMemory</td><td>Zero-boilerplate typed value object with timestamp</td></tr>
+        <tr><td>Numerics</td><td>NumPy</td><td>≥1.26</td><td>Audio buffer math</td><td>Vectorised PCM operations</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3 style="margin-bottom:1rem;">Development &amp; Tooling</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Tool</th><th>Version</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>Git</td><td>2.x</td><td>Version control — GitHub remote <code>HaRsH00000007/Voice_agent</code></td></tr>
+        <tr><td>Miniconda / venv</td><td>Python 3.12</td><td>Virtual environment isolation — env name <code>voiceagent</code></td></tr>
+        <tr><td>pipwin</td><td>optional</td><td>Windows-specific PyAudio wheel installer</td></tr>
+        <tr><td>PortAudio</td><td>v19 (via PyAudio)</td><td>Cross-platform audio I/O abstraction</td></tr>
+        <tr><td>.env / dotenv</td><td>—</td><td>Secret management — <code>GROQ_API_KEY</code> + <code>GEMINI_API_KEY</code></td></tr>
+        <tr><td>GitHub</td><td>—</td><td>Remote repository, branch: <code>main</code></td></tr>
+        <tr><td>Windows 11</td><td>10.0.26200</td><td>Development &amp; runtime platform</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ── HIGH-LEVEL DESIGN ─────────────────────────────────────────────────── -->
+<section id="hld">
+  <h2><span class="ico">🏗️</span> High-Level System Design</h2>
+  <div class="diagram" style="margin-bottom:2rem;">
+    <svg width="100%" viewBox="0 0 940 440" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#8B949E"/></marker>
+        <marker id="arr-blue" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#0A84FF"/></marker>
+        <marker id="arr-green" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#30D158"/></marker>
+        <marker id="arr-gold" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#FFD60A"/></marker>
+        <filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+
+      <!-- USER -->
+      <rect x="15" y="170" width="115" height="70" rx="10" fill="#1C2128" stroke="#0A84FF" stroke-width="1.5"/>
+      <text x="72" y="200" text-anchor="middle" fill="#0A84FF" font-size="20">👤</text>
+      <text x="72" y="220" text-anchor="middle" fill="#E6EDF3" font-size="12" font-weight="600">USER</text>
+      <text x="72" y="233" text-anchor="middle" fill="#8B949E" font-size="9">speaks / hears</text>
+
+      <!-- AUDIO -->
+      <rect x="180" y="130" width="140" height="155" rx="10" fill="#1C2128" stroke="#30D158" stroke-width="1.5"/>
+      <text x="250" y="155" text-anchor="middle" fill="#30D158" font-size="11" font-weight="700">AUDIO LAYER</text>
+      <text x="250" y="169" text-anchor="middle" fill="#8B949E" font-size="9">core/audio.py</text>
+      <rect x="194" y="178" width="112" height="30" rx="5" fill="#0D1117" stroke="#30D158" stroke-width="1"/>
+      <text x="250" y="198" text-anchor="middle" fill="#30D158" font-size="10">🎤 Capture Thread</text>
+      <rect x="194" y="218" width="112" height="30" rx="5" fill="#0D1117" stroke="#30D158" stroke-width="1"/>
+      <text x="250" y="238" text-anchor="middle" fill="#30D158" font-size="10">🔊 pyttsx3 TTS</text>
+      <text x="250" y="272" text-anchor="middle" fill="#8B949E" font-size="9">input_queue (PCM)</text>
+
+      <!-- STREAMLIT -->
+      <rect x="380" y="20" width="155" height="130" rx="10" fill="#1C2128" stroke="#0A84FF" stroke-width="1.5"/>
+      <text x="458" y="46" text-anchor="middle" fill="#0A84FF" font-size="11" font-weight="700">STREAMLIT UI</text>
+      <text x="458" y="62" text-anchor="middle" fill="#8B949E" font-size="9">app.py</text>
+      <rect x="394" y="72" width="126" height="22" rx="4" fill="#0D1117" stroke="#0A84FF" stroke-width="1"/>
+      <text x="458" y="87" text-anchor="middle" fill="#0A84FF" font-size="9">_transcript_q (Queue)</text>
+      <rect x="394" y="102" width="126" height="22" rx="4" fill="#0D1117" stroke="#0A84FF" stroke-width="1"/>
+      <text x="458" y="117" text-anchor="middle" fill="#0A84FF" font-size="9">_status (Lock + dict)</text>
+      <rect x="394" y="132" width="126" height="12" rx="3" fill="#0D1117" stroke="#8B949E" stroke-width="1"/>
+      <text x="458" y="142" text-anchor="middle" fill="#8B949E" font-size="8">auto-refresh 0.7s</text>
+
+      <!-- VOICE AGENT -->
+      <rect x="380" y="170" width="155" height="155" rx="10" fill="#1C2128" stroke="#FF453A" stroke-width="1.5" filter="url(#glow)"/>
+      <text x="458" y="196" text-anchor="middle" fill="#FF453A" font-size="11" font-weight="700">VOICE AGENT</text>
+      <text x="458" y="211" text-anchor="middle" fill="#8B949E" font-size="9">core/agent.py</text>
+      <rect x="394" y="220" width="126" height="22" rx="4" fill="#0D1117" stroke="#30D158" stroke-width="1"/>
+      <text x="458" y="235" text-anchor="middle" fill="#30D158" font-size="9">_collect_speech (VAD)</text>
+      <rect x="394" y="250" width="126" height="22" rx="4" fill="#0D1117" stroke="#0A84FF" stroke-width="1"/>
+      <text x="458" y="265" text-anchor="middle" fill="#0A84FF" font-size="9">Groq Whisper STT</text>
+      <rect x="394" y="280" width="126" height="22" rx="4" fill="#0D1117" stroke="#0A84FF" stroke-width="1"/>
+      <text x="458" y="295" text-anchor="middle" fill="#0A84FF" font-size="9">Groq LLaMA Chat</text>
+      <text x="458" y="316" text-anchor="middle" fill="#8B949E" font-size="9">background daemon thread</text>
+
+      <!-- MEMORY -->
+      <rect x="380" y="345" width="155" height="65" rx="10" fill="#1C2128" stroke="#30D158" stroke-width="1.5"/>
+      <text x="458" y="368" text-anchor="middle" fill="#30D158" font-size="11" font-weight="700">MEMORY</text>
+      <text x="458" y="384" text-anchor="middle" fill="#8B949E" font-size="9">core/memory.py</text>
+      <text x="458" y="400" text-anchor="middle" fill="#8B949E" font-size="9">rolling 40-turn window (Lock)</text>
+
+      <!-- GROQ CLOUD -->
+      <rect x="600" y="80" width="160" height="155" rx="10" fill="#1C2128" stroke="#0A84FF" stroke-width="1.5"/>
+      <text x="680" y="106" text-anchor="middle" fill="#0A84FF" font-size="11" font-weight="700">GROQ CLOUD</text>
+      <text x="680" y="121" text-anchor="middle" fill="#8B949E" font-size="9">api.groq.com</text>
+      <rect x="614" y="132" width="132" height="34" rx="6" fill="#0D1117" stroke="#30D158" stroke-width="1"/>
+      <text x="680" y="148" text-anchor="middle" fill="#30D158" font-size="10">whisper-large-v3</text>
+      <text x="680" y="161" text-anchor="middle" fill="#8B949E" font-size="8">audio.transcriptions</text>
+      <rect x="614" y="176" width="132" height="34" rx="6" fill="#0D1117" stroke="#0A84FF" stroke-width="1"/>
+      <text x="680" y="192" text-anchor="middle" fill="#0A84FF" font-size="10">llama-3.3-70b-versatile</text>
+      <text x="680" y="205" text-anchor="middle" fill="#8B949E" font-size="8">chat.completions</text>
+      <rect x="614" y="220" width="132" height="10" rx="3" fill="#0D1117" stroke="#8B949E" stroke-width="1"/>
+      <text x="680" y="229" text-anchor="middle" fill="#8B949E" font-size="7">sub-200ms TTFT</text>
+
+      <!-- TOOLS -->
+      <rect x="600" y="260" width="160" height="110" rx="10" fill="#1C2128" stroke="#FF453A" stroke-width="1.5"/>
+      <text x="680" y="284" text-anchor="middle" fill="#FF453A" font-size="11" font-weight="700">TOOL REGISTRY</text>
+      <text x="680" y="299" text-anchor="middle" fill="#8B949E" font-size="9">core/tools.py</text>
+      <text x="680" y="320" text-anchor="middle" fill="#8B949E" font-size="9">book_demo(name, date, time)</text>
+      <text x="680" y="336" text-anchor="middle" fill="#8B949E" font-size="9">check_slot_availability(date)</text>
+      <text x="680" y="352" text-anchor="middle" fill="#8B949E" font-size="9">get_current_time()</text>
+
+      <!-- MIC FLUSH (new) -->
+      <rect x="600" y="390" width="160" height="40" rx="8" fill="#0D1117" stroke="#FFD60A" stroke-width="1.5" stroke-dasharray="5,3"/>
+      <text x="680" y="408" text-anchor="middle" fill="#FFD60A" font-size="9" font-weight="600">_flush_mic_after_speaking</text>
+      <text x="680" y="422" text-anchor="middle" fill="#8B949E" font-size="8">400ms + drain → echo-free</text>
+
+      <!-- ARROWS -->
+      <line x1="130" y1="192" x2="178" y2="192" stroke="#30D158" stroke-width="1.5" marker-end="url(#arr-green)" stroke-dasharray="4,2"/>
+      <text x="154" y="185" text-anchor="middle" fill="#30D158" font-size="8">PCM 16kHz</text>
+      <line x1="178" y1="222" x2="130" y2="222" stroke="#30D158" stroke-width="1.5" marker-end="url(#arr-green)"/>
+      <text x="154" y="216" text-anchor="middle" fill="#30D158" font-size="8">voice out</text>
+      <line x1="320" y1="220" x2="378" y2="240" stroke="#8B949E" stroke-width="1.2" marker-end="url(#arr)" stroke-dasharray="3,2"/>
+      <text x="352" y="222" text-anchor="middle" fill="#8B949E" font-size="8">chunks</text>
+      <line x1="458" y1="150" x2="458" y2="168" stroke="#0A84FF" stroke-width="1.5" marker-end="url(#arr-blue)"/>
+      <text x="475" y="164" fill="#0A84FF" font-size="8">start/stop</text>
+      <line x1="458" y1="325" x2="458" y2="343" stroke="#30D158" stroke-width="1.5" marker-end="url(#arr-green)"/>
+      <text x="474" y="340" fill="#30D158" font-size="8">turns</text>
+      <line x1="535" y1="255" x2="598" y2="185" stroke="#30D158" stroke-width="1.8" marker-end="url(#arr-green)"/>
+      <text x="573" y="210" text-anchor="middle" fill="#30D158" font-size="8">WAV audio</text>
+      <line x1="598" y1="200" x2="535" y2="270" stroke="#0A84FF" stroke-width="1.8" marker-end="url(#arr-blue)"/>
+      <text x="562" y="248" text-anchor="middle" fill="#0A84FF" font-size="8">text</text>
+      <line x1="535" y1="290" x2="598" y2="280" stroke="#0A84FF" stroke-width="1.8" marker-end="url(#arr-blue)"/>
+      <text x="566" y="278" text-anchor="middle" fill="#0A84FF" font-size="8">messages[]</text>
+      <line x1="598" y1="290" x2="535" y2="300" stroke="#0A84FF" stroke-width="1.8" marker-end="url(#arr-blue)"/>
+      <text x="566" y="308" text-anchor="middle" fill="#0A84FF" font-size="8">reply text</text>
+      <line x1="535" y1="305" x2="598" y2="305" stroke="#FF453A" stroke-width="1.3" marker-end="url(#arr)" stroke-dasharray="4,2"/>
+      <text x="566" y="320" text-anchor="middle" fill="#FF453A" font-size="8">tool call</text>
+      <line x1="598" y1="315" x2="535" y2="312" stroke="#FF453A" stroke-width="1.3" marker-end="url(#arr)" stroke-dasharray="4,2"/>
+      <line x1="535" y1="320" x2="601" y2="405" stroke="#FFD60A" stroke-width="1.3" marker-end="url(#arr-gold)" stroke-dasharray="4,2"/>
+      <text x="560" y="380" text-anchor="middle" fill="#FFD60A" font-size="8">after TTS</text>
+
+      <!-- Legend -->
+      <line x1="15" y1="415" x2="42" y2="415" stroke="#0A84FF" stroke-width="2"/>
+      <text x="48" y="419" fill="#8B949E" font-size="9">Groq API</text>
+      <line x1="110" y1="415" x2="137" y2="415" stroke="#30D158" stroke-width="2"/>
+      <text x="143" y="419" fill="#8B949E" font-size="9">Audio</text>
+      <line x1="190" y1="415" x2="217" y2="415" stroke="#FF453A" stroke-width="2"/>
+      <text x="223" y="419" fill="#8B949E" font-size="9">Tools</text>
+      <line x1="265" y1="415" x2="292" y2="415" stroke="#FFD60A" stroke-width="2" stroke-dasharray="4,2"/>
+      <text x="298" y="419" fill="#8B949E" font-size="9">Echo flush</text>
+    </svg>
+  </div>
+
+  <h3>Complete Data Flow — One Conversation Turn</h3>
+  <div style="margin-top:1rem;">
+    <div class="flow">
+      <div class="fbox blue">① User speaks</div><span class="arrow">→</span>
+      <div class="fbox green">② PyAudio 16kHz PCM</div><span class="arrow">→</span>
+      <div class="fbox">③ input_queue chunks</div><span class="arrow">→</span>
+      <div class="fbox green">④ VAD gate (RMS &gt; 800, ≥5 frames)</div><span class="arrow">→</span>
+      <div class="fbox">⑤ PCM → WAV buffer</div>
+    </div>
+    <div class="flow">
+      <div class="fbox blue">⑥ Groq whisper-large-v3</div><span class="arrow">→</span>
+      <div class="fbox">⑦ Transcribed text</div><span class="arrow">→</span>
+      <div class="fbox">⑧ Append to messages[]</div><span class="arrow">→</span>
+      <div class="fbox blue">⑨ Groq llama-3.3-70b</div><span class="arrow">→</span>
+      <div class="fbox green">⑩ Reply text</div>
+    </div>
+    <div class="flow">
+      <div class="fbox green">⑩ Reply text</div><span class="arrow">→</span>
+      <div class="fbox green">⑪ pyttsx3 SAPI5</div><span class="arrow">→</span>
+      <div class="fbox blue">⑫ User hears reply</div><span class="arrow">→</span>
+      <div class="fbox gold">⑬ _flush_mic (400ms + drain)</div><span class="arrow">→</span>
+      <div class="fbox green">⑭ Back to ①</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── LOW-LEVEL DESIGN ──────────────────────────────────────────────────── -->
+<section id="lld">
+  <h2><span class="ico">🔬</span> Low-Level System Design</h2>
+
+  <h3 style="margin-bottom:.75rem;">VoiceAgent State Machine</h3>
+  <div class="diagram" style="margin-bottom:2rem;">
+    <svg width="100%" viewBox="0 0 860 190" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="sm" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#0A84FF"/></marker>
+        <marker id="sm2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#30D158"/></marker>
+        <marker id="sm3" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#FFD60A"/></marker>
+      </defs>
+      <ellipse cx="70" cy="95" rx="58" ry="32" fill="#1C2128" stroke="#8B949E" stroke-width="1.5"/>
+      <text x="70" y="99" text-anchor="middle" fill="#8B949E" font-size="11" font-weight="600">IDLE</text>
+
+      <ellipse cx="210" cy="95" rx="58" ry="32" fill="#1C2128" stroke="#0A84FF" stroke-width="2"/>
+      <text x="210" y="99" text-anchor="middle" fill="#0A84FF" font-size="11" font-weight="600">CONNECTING</text>
+
+      <ellipse cx="370" cy="95" rx="62" ry="32" fill="#1C2128" stroke="#30D158" stroke-width="2"/>
+      <text x="370" y="99" text-anchor="middle" fill="#30D158" font-size="11" font-weight="600">LISTENING</text>
+
+      <ellipse cx="545" cy="95" rx="62" ry="32" fill="#1C2128" stroke="#0A84FF" stroke-width="2"/>
+      <text x="545" y="99" text-anchor="middle" fill="#0A84FF" font-size="11" font-weight="600">THINKING…</text>
+
+      <ellipse cx="715" cy="95" rx="62" ry="32" fill="#1C2128" stroke="#FF453A" stroke-width="2"/>
+      <text x="715" y="99" text-anchor="middle" fill="#FF453A" font-size="11" font-weight="600">SPEAKING</text>
+
+      <ellipse cx="840" cy="95" rx="48" ry="32" fill="#1C2128" stroke="#FFD60A" stroke-width="2"/>
+      <text x="840" y="92" text-anchor="middle" fill="#FFD60A" font-size="9" font-weight="600">FLUSH</text>
+      <text x="840" y="104" text-anchor="middle" fill="#FFD60A" font-size="8">MIC</text>
+
+      <line x1="128" y1="95" x2="150" y2="95" stroke="#0A84FF" stroke-width="1.5" marker-end="url(#sm)"/>
+      <text x="139" y="87" text-anchor="middle" fill="#8B949E" font-size="8">start()</text>
+      <line x1="268" y1="95" x2="306" y2="95" stroke="#30D158" stroke-width="1.5" marker-end="url(#sm2)"/>
+      <text x="287" y="87" text-anchor="middle" fill="#8B949E" font-size="8">ready</text>
+      <line x1="432" y1="95" x2="481" y2="95" stroke="#0A84FF" stroke-width="1.5" marker-end="url(#sm)"/>
+      <text x="457" y="87" text-anchor="middle" fill="#8B949E" font-size="8">speech end</text>
+      <line x1="607" y1="95" x2="651" y2="95" stroke="#FF453A" stroke-width="1.5" marker-end="url(#sm)"/>
+      <text x="629" y="87" text-anchor="middle" fill="#8B949E" font-size="8">LLM reply</text>
+      <line x1="777" y1="95" x2="790" y2="95" stroke="#FFD60A" stroke-width="1.5" marker-end="url(#sm3)"/>
+      <text x="783" y="87" text-anchor="middle" fill="#FFD60A" font-size="8">done</text>
+      <path d="M810,127 Q590,172 370,127" fill="none" stroke="#30D158" stroke-width="1.5" stroke-dasharray="4,2" marker-end="url(#sm2)"/>
+      <text x="590" y="168" text-anchor="middle" fill="#30D158" font-size="8">flushed → back to listening</text>
+      <path d="M545,63 Q310,12 70,63" fill="none" stroke="#8B949E" stroke-width="1.2" stroke-dasharray="4,2" marker-end="url(#sm)"/>
+      <text x="300" y="16" text-anchor="middle" fill="#8B949E" font-size="8">stop() / error</text>
+    </svg>
+  </div>
+
+  <h3 style="margin-bottom:.75rem;">Streamlit Threading Architecture</h3>
+  <div class="diagram" style="margin-bottom:2rem;">
+    <svg width="100%" viewBox="0 0 860 220" xmlns="http://www.w3.org/2000/svg">
+      <!-- Streamlit thread -->
+      <rect x="10" y="10" width="380" height="200" rx="12" fill="#161B22" stroke="#0A84FF" stroke-width="1.5"/>
+      <text x="200" y="34" text-anchor="middle" fill="#0A84FF" font-size="11" font-weight="600">Streamlit Main Thread (reruns every 0.7s)</text>
+      <rect x="25" y="48" width="350" height="30" rx="6" fill="#0D1117" stroke="#0A84FF" stroke-width="1"/>
+      <text x="200" y="68" text-anchor="middle" fill="#0A84FF" font-size="10">_drain_queue() → session_state.transcript.append()</text>
+      <rect x="25" y="88" width="350" height="30" rx="6" fill="#0D1117" stroke="#0A84FF" stroke-width="1"/>
+      <text x="200" y="108" text-anchor="middle" fill="#0A84FF" font-size="10">_get_status() → sidebar status indicator</text>
+      <rect x="25" y="128" width="350" height="30" rx="6" fill="#0D1117" stroke="#8B949E" stroke-width="1"/>
+      <text x="200" y="148" text-anchor="middle" fill="#E6EDF3" font-size="10">st.chat_message() render loop</text>
+      <rect x="25" y="168" width="350" height="30" rx="6" fill="#0D1117" stroke="#8B949E" stroke-width="1"/>
+      <text x="200" y="188" text-anchor="middle" fill="#E6EDF3" font-size="10">time.sleep(0.7) → st.rerun()</text>
+
+      <!-- Thread-safe bridge -->
+      <rect x="415" y="50" width="120" height="120" rx="10" fill="#0D1117" stroke="#FFD60A" stroke-width="2" stroke-dasharray="5,3"/>
+      <text x="475" y="76" text-anchor="middle" fill="#FFD60A" font-size="10" font-weight="600">THREAD-SAFE</text>
+      <text x="475" y="91" text-anchor="middle" fill="#FFD60A" font-size="9">BRIDGE</text>
+      <rect x="425" y="100" width="100" height="20" rx="4" fill="#1C2128" stroke="#FFD60A" stroke-width="1"/>
+      <text x="475" y="114" text-anchor="middle" fill="#FFD60A" font-size="8">_transcript_q</text>
+      <rect x="425" y="128" width="100" height="20" rx="4" fill="#1C2128" stroke="#FFD60A" stroke-width="1"/>
+      <text x="475" y="142" text-anchor="middle" fill="#FFD60A" font-size="8">_status + Lock</text>
+
+      <!-- Agent thread -->
+      <rect x="560" y="10" width="285" height="200" rx="12" fill="#161B22" stroke="#FF453A" stroke-width="1.5"/>
+      <text x="702" y="34" text-anchor="middle" fill="#FF453A" font-size="11" font-weight="600">Agent Background Thread (daemon)</text>
+      <rect x="575" y="48" width="255" height="30" rx="6" fill="#0D1117" stroke="#30D158" stroke-width="1"/>
+      <text x="702" y="68" text-anchor="middle" fill="#30D158" font-size="10">_collect_speech() VAD loop</text>
+      <rect x="575" y="88" width="255" height="30" rx="6" fill="#0D1117" stroke="#0A84FF" stroke-width="1"/>
+      <text x="702" y="108" text-anchor="middle" fill="#0A84FF" font-size="10">Groq Whisper STT</text>
+      <rect x="575" y="128" width="255" height="30" rx="6" fill="#0D1117" stroke="#0A84FF" stroke-width="1"/>
+      <text x="702" y="148" text-anchor="middle" fill="#0A84FF" font-size="10">Groq LLaMA chat</text>
+      <rect x="575" y="168" width="255" height="30" rx="6" fill="#0D1117" stroke="#FF453A" stroke-width="1"/>
+      <text x="702" y="188" text-anchor="middle" fill="#FF453A" font-size="10">pyttsx3 speak → flush mic</text>
+
+      <!-- Arrows -->
+      <line x1="395" y1="108" x2="413" y2="120" stroke="#FFD60A" stroke-width="1.5" stroke-dasharray="3,2"/>
+      <line x1="537" y1="115" x2="559" y2="108" stroke="#FFD60A" stroke-width="1.5" stroke-dasharray="3,2"/>
+      <text x="475" y="46" text-anchor="middle" fill="#FFD60A" font-size="8">safe write</text>
+      <text x="475" y="178" text-anchor="middle" fill="#FFD60A" font-size="8">safe read</text>
+    </svg>
+  </div>
+
+  <h3 style="margin-bottom:.75rem;">VAD + Echo-Free Capture Flow</h3>
+  <div class="diagram">
+    <svg width="100%" viewBox="0 0 860 180" xmlns="http://www.w3.org/2000/svg">
+      <rect x="10" y="20" width="130" height="140" rx="8" fill="#0D1117" stroke="#30D158" stroke-width="1.5"/>
+      <text x="75" y="42" text-anchor="middle" fill="#30D158" font-size="10" font-weight="600">Capture Thread</text>
+      <text x="75" y="62" text-anchor="middle" fill="#8B949E" font-size="9">reads 1024-frame</text>
+      <text x="75" y="76" text-anchor="middle" fill="#8B949E" font-size="9">PCM chunks</text>
+      <text x="75" y="96" text-anchor="middle" fill="#FF453A" font-size="9">audioop.rms()</text>
+      <text x="75" y="112" text-anchor="middle" fill="#8B949E" font-size="9">always running</text>
+      <text x="75" y="126" text-anchor="middle" fill="#8B949E" font-size="9">even during TTS</text>
+
+      <rect x="180" y="20" width="150" height="140" rx="8" fill="#0D1117" stroke="#FFD60A" stroke-width="1.5"/>
+      <text x="255" y="42" text-anchor="middle" fill="#FFD60A" font-size="10" font-weight="600">VAD Gate</text>
+      <text x="255" y="62" text-anchor="middle" fill="#8B949E" font-size="9">rms &gt; 800 → speech</text>
+      <text x="255" y="78" text-anchor="middle" fill="#8B949E" font-size="9">speech_frames += 1</text>
+      <text x="255" y="98" text-anchor="middle" fill="#FFD60A" font-size="9">need ≥ 5 frames</text>
+      <text x="255" y="114" text-anchor="middle" fill="#8B949E" font-size="9">(≈320ms real speech)</text>
+      <text x="255" y="130" text-anchor="middle" fill="#8B949E" font-size="9">25 silence frames</text>
+      <text x="255" y="144" text-anchor="middle" fill="#8B949E" font-size="9">ends utterance</text>
+
+      <rect x="375" y="20" width="150" height="140" rx="8" fill="#0D1117" stroke="#0A84FF" stroke-width="1.5"/>
+      <text x="450" y="42" text-anchor="middle" fill="#0A84FF" font-size="10" font-weight="600">WAV + Whisper</text>
+      <text x="450" y="62" text-anchor="middle" fill="#8B949E" font-size="9">PCM → WAV (io.BytesIO)</text>
+      <text x="450" y="78" text-anchor="middle" fill="#8B949E" font-size="9">16kHz mono Int16</text>
+      <text x="450" y="98" text-anchor="middle" fill="#0A84FF" font-size="9">Groq whisper-large-v3</text>
+      <text x="450" y="114" text-anchor="middle" fill="#8B949E" font-size="9">response_format=text</text>
+      <text x="450" y="130" text-anchor="middle" fill="#8B949E" font-size="9">returns plain string</text>
+
+      <rect x="570" y="20" width="140" height="140" rx="8" fill="#0D1117" stroke="#FF453A" stroke-width="1.5"/>
+      <text x="640" y="42" text-anchor="middle" fill="#FF453A" font-size="10" font-weight="600">pyttsx3 TTS</text>
+      <text x="640" y="62" text-anchor="middle" fill="#8B949E" font-size="9">engine.say(text)</text>
+      <text x="640" y="78" text-anchor="middle" fill="#8B949E" font-size="9">runAndWait()</text>
+      <text x="640" y="98" text-anchor="middle" fill="#FFD60A" font-size="9">_flush_mic (400ms)</text>
+      <text x="640" y="114" text-anchor="middle" fill="#8B949E" font-size="9">drain input_queue</text>
+      <text x="640" y="130" text-anchor="middle" fill="#8B949E" font-size="9">prevents echo loop</text>
+
+      <rect x="755" y="50" width="90" height="80" rx="8" fill="#0D1117" stroke="#30D158" stroke-width="1.5"/>
+      <text x="800" y="78" text-anchor="middle" fill="#30D158" font-size="10" font-weight="600">Listening</text>
+      <text x="800" y="96" text-anchor="middle" fill="#8B949E" font-size="9">clean mic</text>
+      <text x="800" y="112" text-anchor="middle" fill="#8B949E" font-size="9">next turn</text>
+
+      <defs><marker id="fla" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#8B949E"/></marker></defs>
+      <line x1="140" y1="90" x2="178" y2="90" stroke="#8B949E" stroke-width="1.5" marker-end="url(#fla)"/>
+      <line x1="330" y1="90" x2="373" y2="90" stroke="#8B949E" stroke-width="1.5" marker-end="url(#fla)"/>
+      <line x1="525" y1="90" x2="568" y2="90" stroke="#8B949E" stroke-width="1.5" marker-end="url(#fla)"/>
+      <line x1="710" y1="90" x2="753" y2="90" stroke="#30D158" stroke-width="1.5" marker-end="url(#fla)"/>
+    </svg>
+  </div>
+</section>
+
+<!-- ── COMPONENTS ────────────────────────────────────────────────────────── -->
+<section id="components">
+  <h2><span class="ico">🧩</span> Component Breakdown — Final State</h2>
+  <div class="comp-grid">
+    <div class="comp-card">
+      <div class="file">app.py — Streamlit UI</div>
+      <h3>Responsibilities</h3>
+      <ul>
+        <li>Module-level _transcript_q (Queue) — thread-safe transcript bridge</li>
+        <li>Module-level _status dict + Lock — thread-safe status bridge</li>
+        <li>_drain_queue() on every rerun — pulls transcript into session_state</li>
+        <li>Start/Stop session orchestration</li>
+        <li>Sidebar: GROQ_API_KEY check, controls, live status indicator</li>
+        <li>Live transcript rendering (st.chat_message format)</li>
+        <li>Stats bar: total turns, user/agent counts</li>
+        <li>0.7 s auto-refresh via time.sleep + st.rerun()</li>
+      </ul>
+    </div>
+    <div class="comp-card">
+      <div class="file">config.py — Configuration</div>
+      <h3>Responsibilities</h3>
+      <ul>
+        <li>Load .env via python-dotenv</li>
+        <li>GROQ_API_KEY env var extraction</li>
+        <li>LIVE_MODEL = llama-3.3-70b-versatile</li>
+        <li>INPUT_SAMPLE_RATE = 16 000 Hz</li>
+        <li>CHUNK_SIZE = 1 024 frames (~64 ms)</li>
+        <li>SILENCE_THRESHOLD = 800 RMS (raised from 500)</li>
+        <li>MAX_HISTORY_TURNS = 20 (40 message objects)</li>
+        <li>load_system_prompt() from prompts/system_prompt.txt</li>
+      </ul>
+    </div>
+    <div class="comp-card">
+      <div class="file">core/agent.py — VoiceAgent (complete rewrite)</div>
+      <h3>Responsibilities</h3>
+      <ul>
+        <li>Groq client init (STT + LLM on same client)</li>
+        <li>Background daemon thread with private asyncio loop</li>
+        <li>_collect_speech(): VAD gate with MIN_SPEECH_FRAMES=5</li>
+        <li>_transcribe(): PCM → WAV → Groq whisper-large-v3</li>
+        <li>_ask_groq(): full messages[] → llama-3.3-70b → reply</li>
+        <li>_speak(): pyttsx3 SAPI5 TTS (offline)</li>
+        <li>_flush_mic_after_speaking(): 400ms + drain — echo killer</li>
+        <li>Thread-safe callbacks to _transcript_q / _status</li>
+      </ul>
+    </div>
+    <div class="comp-card">
+      <div class="file">core/audio.py — AudioHandler</div>
+      <h3>Responsibilities</h3>
+      <ul>
+        <li>PyAudio I/O stream lifecycle (open/close/terminate)</li>
+        <li>Capture thread: read mic 16kHz → input_queue.put()</li>
+        <li>Playback thread: output_queue.get() → speaker (legacy)</li>
+        <li>Interrupt detection via audioop.rms</li>
+        <li>interrupt(): drain output_queue</li>
+        <li>Thread-safe queue-based producer/consumer</li>
+      </ul>
+    </div>
+    <div class="comp-card">
+      <div class="file">core/memory.py — ConversationMemory</div>
+      <h3>Responsibilities</h3>
+      <ul>
+        <li>Thread-safe rolling conversation history</li>
+        <li>Turn dataclass: role + text + HH:MM:SS timestamp</li>
+        <li>threading.Lock() protects _turns list</li>
+        <li>Auto-trim to MAX_HISTORY_TURNS × 2 = 40 entries</li>
+        <li>get_history() returns immutable snapshot copy</li>
+        <li>clear() resets between sessions</li>
+      </ul>
+    </div>
+    <div class="comp-card">
+      <div class="file">core/tools.py — Tool Registry</div>
+      <h3>Responsibilities</h3>
+      <ul>
+        <li>book_demo(name, date, time) → booking ID + confirmation</li>
+        <li>check_slot_availability(date) → 4 available time slots</li>
+        <li>get_current_time() → current datetime</li>
+        <li>TOOL_REGISTRY dict for O(1) dispatch</li>
+        <li>dispatch(name, args) — safe unknown-tool handling</li>
+        <li>GROQ_TOOLS — OpenAI-format JSON schema for API</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ── CONFIG REFERENCE ──────────────────────────────────────────────────── -->
+<section id="config">
+  <h2><span class="ico">⚙️</span> Configuration Reference — Final Values</h2>
+  <div class="cfg">
+    <div class="cfg-item"><span class="key">GROQ_API_KEY</span><span class="v">.env (required)</span></div>
+    <div class="cfg-item"><span class="key">LIVE_MODEL</span><span class="v">llama-3.3-70b-versatile</span></div>
+    <div class="cfg-item"><span class="key">STT_MODEL</span><span class="v">whisper-large-v3</span></div>
+    <div class="cfg-item"><span class="key">TTS_ENGINE</span><span class="v">pyttsx3 SAPI5 (offline)</span></div>
+    <div class="cfg-item"><span class="key">INPUT_SAMPLE_RATE</span><span class="v">16 000 Hz</span></div>
+    <div class="cfg-item"><span class="key">CHANNELS</span><span class="v">1 (mono)</span></div>
+    <div class="cfg-item"><span class="key">CHUNK_SIZE</span><span class="v">1 024 frames (~64ms)</span></div>
+    <div class="cfg-item"><span class="key">SILENCE_THRESHOLD</span><span class="v">800 RMS (raised from 500)</span></div>
+    <div class="cfg-item"><span class="key">MIN_SPEECH_FRAMES</span><span class="v">5 frames (≈320ms)</span></div>
+    <div class="cfg-item"><span class="key">SILENCE_LIMIT</span><span class="v">25 frames (≈1.6s)</span></div>
+    <div class="cfg-item"><span class="key">MAX_HISTORY_TURNS</span><span class="v">20 turns (40 messages)</span></div>
+    <div class="cfg-item"><span class="key">MIC_FLUSH_DELAY</span><span class="v">400 ms post-TTS</span></div>
+    <div class="cfg-item"><span class="key">TTS_RATE</span><span class="v">165 wpm</span></div>
+    <div class="cfg-item"><span class="key">UI_REFRESH</span><span class="v">0.7 s</span></div>
+    <div class="cfg-item"><span class="key">LLM_MAX_TOKENS</span><span class="v">256</span></div>
+    <div class="cfg-item"><span class="key">SYSTEM_PROMPT_PATH</span><span class="v">prompts/system_prompt.txt</span></div>
+  </div>
+</section>
+
+<!-- ── PROGRESS ──────────────────────────────────────────────────────────── -->
+<section id="progress">
+  <h2><span class="ico">📈</span> Project Progress</h2>
+  <div style="background:var(--bg2);border:1px solid var(--green);border-radius:12px;padding:1.5rem;margin-bottom:1.5rem;">
+    <div style="display:flex;justify-content:space-between;margin-bottom:.5rem;">
+      <span style="font-weight:600;">Overall Completion</span>
+      <span style="color:var(--green);font-weight:700;">100% — SHIPPED ✅</span>
+    </div>
+    <div style="background:var(--bg3);border-radius:999px;height:10px;overflow:hidden;">
+      <div style="width:100%;height:100%;background:linear-gradient(90deg,var(--blue),var(--green));border-radius:999px;"></div>
+    </div>
+    <div style="margin-top:1rem;font-size:.83rem;color:var(--muted);">
+      Full STT → LLM → TTS pipeline working. Echo-free conversation. Thread-safe UI. System prompt written. All bugs resolved.
+    </div>
+  </div>
+  <div class="progress-grid">
+    <div class="prog-card">
+      <h3 style="color:var(--green);">✅ Completed — All Items</h3>
+      <div class="prog-item"><div class="dot dot-green"></div><span>Project structure &amp; module layout</span></div>
+      <div class="prog-item"><div class="dot dot-green"></div><span>Streamlit UI — sidebar, transcript, stats, auto-refresh</span></div>
+      <div class="prog-item"><div class="dot dot-green"></div><span>Thread-safe UI bridge (_transcript_q + _status Lock)</span></div>
+      <div class="prog-item"><div class="dot dot-green"></div><span>AudioHandler — dual-threaded capture + playback</span></div>
+      <div class="prog-item"><div class="dot dot-green"></div><span>VAD noise gate — MIN_SPEECH_FRAMES + RMS=800</span></div>
+      <div class="prog-item"><div class="dot dot-green"></div><span>STT — Groq whisper-large-v3 via WAV buffer</span></div>
+      <div class="prog-item"><div class="dot dot-green"></div><span>LLM — Groq llama-3.3-70b-versatile with history</span></div>
+      <div class="prog-item"><div class="dot dot-green"></div><span>TTS — pyttsx3 SAPI5 offline voice</span></div>
+      <div class="prog-item"><div class="dot dot-green"></div><span>Echo flush — _flush_mic_after_speaking()</span></div>
+      <div class="prog-item"><div class="dot dot-green"></div><span>ConversationMemory — thread-safe rolling window</span></div>
+      <div class="prog-item"><div class="dot dot-green"></div><span>Tool registry — 3 tools wired to Groq schema</span></div>
+      <div class="prog-item"><div class="dot dot-green"></div><span>System prompt — JARVIS persona written</span></div>
+      <div class="prog-item"><div class="dot dot-green"></div><span>Error logging — agent_error.log with tracebacks</span></div>
+      <div class="prog-item"><div class="dot dot-green"></div><span>Git repo + GitHub remote</span></div>
+    </div>
+    <div class="prog-card">
+      <h3 style="color:var(--gold);">🔮 Future Enhancements (optional)</h3>
+      <div class="prog-item"><div class="dot dot-gold"></div><span>Persistent booking storage (SQLite / Google Calendar)</span></div>
+      <div class="prog-item"><div class="dot dot-gold"></div><span>Streaming LLM tokens → early TTS start</span></div>
+      <div class="prog-item"><div class="dot dot-gold"></div><span>Silero VAD for more accurate speech segmentation</span></div>
+      <div class="prog-item"><div class="dot dot-gold"></div><span>ElevenLabs / Azure TTS for more natural voice</span></div>
+      <div class="prog-item"><div class="dot dot-gold"></div><span>Retry/backoff for Groq API failures (tenacity)</span></div>
+      <div class="prog-item"><div class="dot dot-gold"></div><span>Unit + integration test suite (pytest-asyncio)</span></div>
+      <div class="prog-item"><div class="dot dot-gold"></div><span>Docker containerisation + GitHub Actions CI</span></div>
+      <div class="prog-item"><div class="dot dot-gold"></div><span>Deploy to Streamlit Community Cloud / Railway</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── API JOURNEY ───────────────────────────────────────────────────────── -->
+<section id="journey">
+  <h2><span class="ico">🗺️</span> API Journey — Problems &amp; Solutions</h2>
+  <p style="margin-bottom:2rem;">This section documents the full decision trail — every API tried, every failure encountered, and exactly why each change was made. This is the real engineering story behind the project.</p>
+
+  <div class="timeline">
+
+    <div class="tl-item">
+      <div class="tl-dot blue"></div>
+      <div class="tl-label" style="color:var(--blue);">Phase 1 — Initial Build</div>
+      <div class="tl-title">Groq API (Mixtral-8x7B) — Scaffolding</div>
+      <div class="tl-body">Project started with Groq as the intended LLM backend using <code>mixtral-8x7b-32768</code>. However, the pipeline was entirely a stub — <code>_recv_loop</code> put empty bytes into the output queue, no STT existed, no TTS existed. The app would start but produce no actual voice conversation. Status stayed at "Connecting" permanently.</div>
+      <div class="tl-code"><span class="bad">✗ stub: self.audio.output_queue.put(b"")  # Placeholder — nothing happened</span></div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot red"></div>
+      <div class="tl-label" style="color:var(--red);">Phase 2 — First Migration Attempt (Failed)</div>
+      <div class="tl-title">Gemini API (google-generativeai) — Deprecated SDK</div>
+      <div class="tl-body">Switched to Gemini API using the <code>google-generativeai</code> package. Immediately hit a <strong>FutureWarning</strong>: the entire package was end-of-life. Google had deprecated it in favour of <code>google-genai</code>. Also attempted using Gemini's audio transcription for STT, but hit <strong>Forbidden (403)</strong> from Google's Web Speech API — geographically restricted in the development environment.</div>
+      <div class="tl-code">
+        <span class="bad">FutureWarning: All support for google.generativeai has ended.</span><br>
+        <span class="bad">[STT ERROR] recognition request failed: Forbidden</span>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot red"></div>
+      <div class="tl-label" style="color:var(--red);">Phase 3 — Second Migration Attempt (Failed)</div>
+      <div class="tl-title">Gemini API (google-genai) — Model Deprecated</div>
+      <div class="tl-body">Migrated to the new <code>google-genai</code> SDK with updated API calls. Switched model to <code>gemini-2.0-flash</code>. Hit immediate <strong>404 NOT_FOUND</strong>: the model was no longer available to new users. Tried <code>gemini-2.5-flash</code> next — same result or unknown model naming instability. Google's rapid model deprecation cycle made it unreliable as a foundation for a real project.</div>
+      <div class="tl-code">
+        <span class="bad">[STT ERROR] 404 NOT_FOUND: This model models/gemini-2.0-flash is no longer available to new users.</span><br>
+        <span class="bad">Status stayed at "Connecting…" — agent crashed before setting "Listening"</span>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot green"></div>
+      <div class="tl-label" style="color:var(--green);">Phase 4 — Groq Return (Working)</div>
+      <div class="tl-title">Groq API — whisper-large-v3 + llama-3.3-70b-versatile</div>
+      <div class="tl-body">Returned to Groq with a complete pipeline implementation. Groq provides both <strong>STT</strong> (Whisper) and <strong>LLM</strong> (LLaMA) under one API key. Whisper is purpose-built for transcription — far more reliable than using an LLM for audio understanding. LLaMA 3.3 70B handles conversation with full multi-turn context. The pipeline was fully wired: <code>_collect_speech → _transcribe → _ask_groq → _speak</code>. STT started working immediately — first transcription: "Hi, Gemini" and "Bye Jarvis!" both captured correctly.</div>
+      <div class="tl-code">
+        <span class="good">[USER] Hi, Gemini.</span><br>
+        <span class="good">[USER] Bye Jarvis!</span><br>
+        <span class="good">STT working — but crashed on session_state access from background thread</span>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot gold"></div>
+      <div class="tl-label" style="color:var(--gold);">Phase 5 — Bug Fixes (Final)</div>
+      <div class="tl-title">Three Critical Bugs Fixed — Project Complete</div>
+      <div class="tl-body">With Groq pipeline working, three production bugs were identified and fixed. See the Bug Fixes section below for full detail. After these fixes the project became fully functional: JARVIS listens, transcribes, reasons, and speaks — with no echo, no hallucinations, and a thread-safe UI.</div>
+      <div class="tl-code">
+        <span class="good">✓ Thread-safe UI bridge — no more session_state crash from background thread</span><br>
+        <span class="good">✓ Echo flush — JARVIS no longer hears its own voice</span><br>
+        <span class="good">✓ VAD noise gate — hallucinations from ambient noise eliminated</span>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="margin-top:2rem;">
+    <h3 style="margin-bottom:1rem;">Gemini vs Groq — Side-by-Side</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Factor</th><th style="color:var(--red);">Gemini (Failed)</th><th style="color:var(--green);">Groq (Working)</th></tr></thead>
+        <tbody>
+          <tr><td>STT</td><td>Audio-via-LLM (experimental) — Forbidden errors</td><td>whisper-large-v3 — purpose-built, reliable</td></tr>
+          <tr><td>LLM</td><td>gemini-2.0-flash → 404 deprecated</td><td>llama-3.3-70b-versatile — stable, fast</td></tr>
+          <tr><td>SDK</td><td>google-generativeai → EOL; google-genai → breaking changes</td><td>groq v1.2.0 — stable, OpenAI-compatible</td></tr>
+          <tr><td>Model naming</td><td>Constantly changing; models deprecated within months</td><td>Stable model IDs, clear versioning</td></tr>
+          <tr><td>API keys</td><td>GEMINI_API_KEY — needed separate STT service too</td><td>GROQ_API_KEY — one key for STT + LLM</td></tr>
+          <tr><td>Latency</td><td>Standard cloud latency</td><td>Sub-200ms TTFT — Groq's core strength</td></tr>
+          <tr><td>Geographic access</td><td>Web Speech API blocked in some regions</td><td>No geo-restrictions on Whisper API</td></tr>
+          <tr><td>Outcome</td><td>Project stuck at "Connecting" for every attempt</td><td>Full working voice conversation</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ── BUG FIXES ─────────────────────────────────────────────────────────── -->
+<section id="bugfixes">
+  <h2><span class="ico">🐛</span> Critical Bug Fixes — Root Cause Analysis</h2>
+  <div class="cards">
+
+    <div class="card" style="border-color:var(--green);">
+      <div class="tag tag-green">BUG 1 — FIXED</div>
+      <h3>Streamlit Thread Isolation Violation</h3>
+      <p><strong>Symptom:</strong> <code>AttributeError: st.session_state has no attribute "transcript"</code> — agent crashed on every transcription.</p>
+      <p style="margin-top:.5rem;"><strong>Root cause:</strong> Streamlit's <code>session_state</code> is bound to the main script execution context (ScriptRunContext). Writing to it from a background daemon thread is undefined behavior — it raises KeyError or AttributeError.</p>
+      <p style="margin-top:.5rem;"><strong>Fix:</strong> Introduced module-level <code>_transcript_q (queue.Queue)</code> and <code>_status (dict + threading.Lock)</code>. Agent writes to these — safe from any thread. Streamlit reads from them on every rerun via <code>_drain_queue()</code>.</p>
+    </div>
+
+    <div class="card" style="border-color:var(--green);">
+      <div class="tag tag-green">BUG 2 — FIXED</div>
+      <h3>Acoustic Echo Loop</h3>
+      <p><strong>Symptom:</strong> JARVIS was speaking continuously without listening — it was having a conversation with itself.</p>
+      <p style="margin-top:.5rem;"><strong>Root cause:</strong> PyAudio's capture thread runs at all times, including while pyttsx3 is playing TTS through the speaker. The speaker audio was picked up by the microphone, fed back into <code>input_queue</code>, transcribed by Whisper, and replied to — creating an infinite self-conversation loop.</p>
+      <p style="margin-top:.5rem;"><strong>Fix:</strong> <code>_flush_mic_after_speaking()</code> — immediately after <code>_speak()</code> returns: sleep 400ms for echo to decay, then drain all accumulated chunks from <code>input_queue</code> before the next listen cycle begins.</p>
+    </div>
+
+    <div class="card" style="border-color:var(--green);">
+      <div class="tag tag-green">BUG 3 — FIXED</div>
+      <h3>Noise Hallucination / Phantom Input</h3>
+      <p><strong>Symptom:</strong> JARVIS would start speaking without the user saying anything — answering questions nobody asked.</p>
+      <p style="margin-top:.5rem;"><strong>Root cause:</strong> <code>SILENCE_THRESHOLD=500</code> sat below Windows ambient noise floor (fan, AC hum, electrical noise typically 300–700 RMS). A brief noise spike triggered <code>speech_started=True</code> with just 1 frame, then 1.6s of near-silence was sent to Whisper — which hallucinated text ("Thank you.", "You", random phrases) from the noise.</p>
+      <p style="margin-top:.5rem;"><strong>Fix:</strong> Raised <code>SILENCE_THRESHOLD</code> to 800 RMS. Added <code>MIN_SPEECH_FRAMES=5</code> gate — requires at least 5 consecutive frames (≈320ms) above threshold before treating input as real speech. Noise bursts are silently discarded.</p>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── WHAT WE BUILT ──────────────────────────────────────────────────────── -->
+<section id="built">
+  <div class="final-banner">
+    <h2><span class="ico">🚀</span> What We Built</h2>
+    <p style="color:var(--green);font-weight:600;font-size:1.1rem;">A fully working, production-quality real-time voice AI agent built entirely in Python — from raw microphone PCM to spoken AI response — using three battle-tested technologies.</p>
+    <p>You speak into your microphone. JARVIS transcribes your words using Groq's Whisper, reasons about them using LLaMA 3.3 70B, and speaks the reply through your speakers using Windows SAPI5 — all in a seamless, echo-free, multi-turn conversation loop.</p>
+  </div>
+
+  <div class="built-grid" style="margin-top:2rem;">
+    <div class="built-card b1">
+      <div class="icon">🎙️</div>
+      <h3>Real-Time Voice Pipeline</h3>
+      <p>End-to-end: microphone → VAD → Groq Whisper STT → Groq LLaMA LLM → pyttsx3 TTS → speaker. Each step runs asynchronously in a background thread, never blocking the UI.</p>
+    </div>
+    <div class="built-card b2">
+      <div class="icon">🧠</div>
+      <h3>Context-Aware Conversation</h3>
+      <p>Full multi-turn chat history maintained across the entire session. JARVIS remembers what you said 10 turns ago. History is bounded to 40 messages and trimmed automatically — no context window overflow.</p>
+    </div>
+    <div class="built-card b3">
+      <div class="icon">🔇</div>
+      <h3>Echo-Free Audio</h3>
+      <p>Post-TTS mic flush (400ms decay + queue drain) ensures JARVIS never hears itself. VAD noise gate (800 RMS + 320ms minimum) blocks hallucinations from ambient noise. Clean conversation every turn.</p>
+    </div>
+    <div class="built-card b4">
+      <div class="icon">🧵</div>
+      <h3>Thread-Safe Architecture</h3>
+      <p>Three threads (Streamlit main, agent asyncio, PyAudio capture) communicate exclusively through <code>queue.Queue</code> and <code>threading.Lock</code> — zero race conditions, zero cross-thread session_state violations.</p>
+    </div>
+    <div class="built-card b1">
+      <div class="icon">🛠️</div>
+      <h3>3 Built-In Voice Tools</h3>
+      <p>Book a product demo by voice. Check availability on any date. Get the current time. All wired to Groq's function-calling schema and dispatched in real time during conversation.</p>
+    </div>
+    <div class="built-card b2">
+      <div class="icon">📊</div>
+      <h3>Live Web Dashboard</h3>
+      <p>Streamlit UI shows the full conversation transcript, real-time status (Listening / Thinking / Speaking), and session stats — all updating every 0.7s without page reload.</p>
+    </div>
+  </div>
+
+  <div style="margin-top:2.5rem;">
+    <h3 style="margin-bottom:1rem;">Technology Summary — Final Stack</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>What</th><th>Technology</th><th>Version</th><th>Why it works</th></tr></thead>
+        <tbody>
+          <tr><td>Speech → Text</td><td>Groq Whisper</td><td>whisper-large-v3</td><td>Most accurate open STT model; Groq's ultra-low latency; no geo-restrictions; one API key</td></tr>
+          <tr><td>Conversation AI</td><td>Groq LLaMA</td><td>llama-3.3-70b-versatile</td><td>70B parameter model; excellent reasoning; stable API; sub-200ms responses</td></tr>
+          <tr><td>Text → Speech</td><td>pyttsx3</td><td>2.99 (SAPI5)</td><td>100% offline; instant; no API cost; Windows-native voice engine</td></tr>
+          <tr><td>Audio I/O</td><td>PyAudio + PortAudio</td><td>0.2.14</td><td>Direct PCM streaming; 16kHz mic capture; minimal latency</td></tr>
+          <tr><td>UI</td><td>Streamlit</td><td>≥1.32</td><td>Zero-JS web UI; session_state; auto-rerun for live updates</td></tr>
+          <tr><td>Runtime</td><td>Python + asyncio + threading</td><td>3.12</td><td>Async pipeline in background thread; non-blocking I/O; clean thread separation</td></tr>
+          <tr><td>Thread Safety</td><td>queue.Queue + threading.Lock</td><td>stdlib</td><td>Zero cross-thread violations; producer-consumer transcript bridge</td></tr>
+          <tr><td>VAD</td><td>audioop.rms (custom gate)</td><td>stdlib</td><td>RMS threshold + minimum frame count; eliminates noise hallucinations</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <p style="font-size:1rem;color:var(--green);font-weight:600;">JARVIS — Real-Time Voice AI Agent &nbsp;·&nbsp; ✅ Complete</p>
+  <p style="margin-top:.5rem;">Python 3.12 &nbsp;·&nbsp; Groq whisper-large-v3 (STT) &nbsp;·&nbsp; Groq llama-3.3-70b-versatile (LLM) &nbsp;·&nbsp; pyttsx3 SAPI5 (TTS) &nbsp;·&nbsp; Streamlit &nbsp;·&nbsp; PyAudio</p>
+  <p style="margin-top:.4rem;">Repo: <code>HaRsH00000007/Voice_agent</code> &nbsp;·&nbsp; Branch: <code>main</code> &nbsp;·&nbsp; Updated: 2026-04-27</p>
+</footer>
+
+</body>
+</html>

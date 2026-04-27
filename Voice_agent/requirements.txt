@@ -1,0 +1,6 @@
+groq
+pyaudio
+streamlit
+python-dotenv
+numpy
+pyttsx3
