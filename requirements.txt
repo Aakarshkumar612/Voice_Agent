@@ -1,9 +1,4 @@
 groq
-pyaudio
 streamlit
 python-dotenv
-numpy
-pyttsx3
-streamlit-webrtc
-gtts          # or elevenlabs
-
+gtts

@@ -1,21 +1,19 @@
 """
-app.py — Streamlit UI for JARVIS Voice AI Agent.
+app.py — JARVIS Voice AI Agent (Cloud Edition)
 
-Threading model:
-  - Agent runs in a daemon thread, cannot touch st.session_state directly.
-  - All cross-thread communication goes through module-level thread-safe
-    primitives (_transcript_q, _status). Streamlit drains them on each rerun.
+Pipeline per turn:
+  st.audio_input() → Groq Whisper STT → Groq LLaMA LLM → gTTS → st.audio()
+
+No PyAudio, no pyttsx3, no background threads — runs on Streamlit Cloud.
 """
 
-import queue
-import threading
-import time
+import io
 
 import streamlit as st
+from gtts import gTTS
+from groq import Groq
 
-from config import GROQ_API_KEY
-from core.audio import AudioHandler
-from core.agent import VoiceAgent
+from config import GROQ_API_KEY, LIVE_MODEL, load_system_prompt
 from core.memory import ConversationMemory
 
 # ── Page config ────────────────────────────────────────────────────────────────
@@ -25,36 +23,12 @@ st.set_page_config(
     layout="wide",
 )
 
-# ── Module-level thread-safe state ─────────────────────────────────────────────
-# These live at module scope so the background agent thread can safely write to
-# them. Streamlit's main thread reads them during each rerun.
-_transcript_q: queue.Queue = queue.Queue()
-_status_lock = threading.Lock()
-_status = {"value": "Idle"}
-
-
-def _set_status(value: str) -> None:
-    with _status_lock:
-        _status["value"] = value
-
-
-def _get_status() -> str:
-    with _status_lock:
-        return _status["value"]
-
-
-def _push_transcript(role: str, text: str) -> None:
-    _transcript_q.put((role, text))
-
-
 # ── Session state bootstrap ────────────────────────────────────────────────────
 def _init_state() -> None:
     defaults = {
-        "running": False,
-        "audio": None,
-        "agent": None,
-        "memory": None,
-        "transcript": [],
+        "memory": ConversationMemory(),
+        "messages": [{"role": "system", "content": load_system_prompt()}],
+        "transcript": [],   # list of (role, text, audio_bytes | None)
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -62,101 +36,35 @@ def _init_state() -> None:
 
 
 _init_state()
-
-# Drain the thread-safe queue into session_state on every rerun
-def _drain_queue() -> None:
-    while not _transcript_q.empty():
-        try:
-            role, text = _transcript_q.get_nowait()
-            st.session_state.transcript.append((role, text))
-        except queue.Empty:
-            break
-
-
-_drain_queue()
-
-# ── Session control ────────────────────────────────────────────────────────────
-def start_session() -> None:
-    if st.session_state.running:
-        return
-    st.session_state.transcript = []
-    _set_status("Connecting…")
-
-    memory = ConversationMemory()
-    audio = AudioHandler()
-    agent = VoiceAgent(
-        audio=audio,
-        memory=memory,
-        on_status_change=_set_status,       # writes to _status dict — safe
-        on_transcript=_push_transcript,     # writes to _transcript_q — safe
-    )
-    audio.start()
-    agent.start()
-
-    st.session_state.memory = memory
-    st.session_state.audio = audio
-    st.session_state.agent = agent
-    st.session_state.running = True
-
-
-def stop_session() -> None:
-    if not st.session_state.running:
-        return
-    if st.session_state.agent:
-        st.session_state.agent.stop()
-    if st.session_state.audio:
-        st.session_state.audio.stop()
-    st.session_state.running = False
-    _set_status("Idle")
-
+_client = Groq(api_key=GROQ_API_KEY)
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## 🎙️ JARVIS")
-    st.markdown("*Real-Time Voice AI Agent*")
+    st.markdown("*Voice AI Agent*")
     st.divider()
 
     if not GROQ_API_KEY:
-        st.error("⚠️ GROQ_API_KEY not set in .env")
+        st.error("⚠️ GROQ_API_KEY not set in Secrets")
     else:
         st.success("API key loaded ✓")
 
     st.divider()
 
-    if not st.session_state.running:
-        if st.button("▶ Start Session", type="primary", use_container_width=True):
-            if not GROQ_API_KEY:
-                st.error("Set GROQ_API_KEY in .env first.")
-            else:
-                start_session()
-    else:
-        if st.button("⏹ Stop Session", type="secondary", use_container_width=True):
-            stop_session()
-
-    st.divider()
-
-    status = _get_status()
-    if status == "Listening":
-        st.markdown("🔴 **Listening…**")
-    elif status == "Speaking":
-        st.markdown("🔵 **Speaking…**")
-    elif "Thinking" in status:
-        st.markdown("🟡 **Thinking…**")
-    elif "Connecting" in status:
-        st.markdown("🟡 **Connecting…**")
-    elif "Error" in status:
-        st.markdown(f"🔴 **{status}**")
-    else:
-        st.markdown("⚪ **Idle**")
+    if st.button("🗑️ Clear Session", use_container_width=True):
+        st.session_state.messages = [{"role": "system", "content": load_system_prompt()}]
+        st.session_state.transcript = []
+        st.session_state.memory.clear()
+        st.rerun()
 
     st.divider()
     st.markdown("#### How to use")
     st.markdown(
-        "1. Click **Start Session**\n"
-        "2. Wait for 🔴 Listening\n"
-        "3. Speak naturally\n"
-        "4. JARVIS replies via speaker\n"
-        "5. Interrupt anytime — just speak"
+        "1. Click the **🎤 mic** at the bottom\n"
+        "2. Speak your message\n"
+        "3. Click **Stop**\n"
+        "4. JARVIS transcribes, thinks, and replies\n"
+        "5. Audio plays in the conversation"
     )
     st.divider()
     st.markdown("#### Try saying")
@@ -164,35 +72,96 @@ with st.sidebar:
     st.code("What slots are free on May 10th?")
     st.code("What time is it right now?")
 
-# ── Main transcript area ───────────────────────────────────────────────────────
+# ── Conversation transcript ────────────────────────────────────────────────────
 st.markdown("## Conversation")
 
-transcript = st.session_state.transcript
+if not st.session_state.transcript:
+    st.info("🎤 Record your message below to start talking with JARVIS.")
 
-if not st.session_state.running and not transcript:
-    st.info("👈 Click **Start Session** in the sidebar to begin talking with JARVIS.")
-
-with st.container():
-    if transcript:
-        for role, text in transcript:
-            if role == "user":
-                with st.chat_message("user"):
-                    st.write(text)
-            else:
-                with st.chat_message("assistant", avatar="🤖"):
-                    st.write(text)
-    elif st.session_state.running:
-        st.markdown("*Waiting for speech…*")
+for role, text, audio_bytes in st.session_state.transcript:
+    if role == "user":
+        with st.chat_message("user"):
+            st.write(text)
+    else:
+        with st.chat_message("assistant", avatar="🤖"):
+            st.write(text)
+            if audio_bytes:
+                st.audio(audio_bytes, format="audio/mp3", autoplay=True)
 
 # ── Stats bar ──────────────────────────────────────────────────────────────────
-if st.session_state.running:
+transcript = st.session_state.transcript
+if transcript:
     st.divider()
     col1, col2, col3 = st.columns(3)
     col1.metric("Turns", len(transcript))
-    col2.metric("You said", sum(1 for r, _ in transcript if r == "user"))
-    col3.metric("JARVIS replied", sum(1 for r, _ in transcript if r == "agent"))
+    col2.metric("You said", sum(1 for r, *_ in transcript if r == "user"))
+    col3.metric("JARVIS replied", sum(1 for r, *_ in transcript if r == "agent"))
 
-# ── Auto-refresh loop ──────────────────────────────────────────────────────────
-if st.session_state.running:
-    time.sleep(0.7)
+# ── Voice input ────────────────────────────────────────────────────────────────
+st.divider()
+audio_value = st.audio_input("🎤 Record your message")
+
+if audio_value and GROQ_API_KEY:
+
+    # ① STT — Groq Whisper
+    with st.spinner("Transcribing…"):
+        try:
+            buf = io.BytesIO(audio_value.read())
+            buf.name = "audio.wav"
+            user_text = (
+                _client.audio.transcriptions.create(
+                    model="whisper-large-v3",
+                    file=buf,
+                    response_format="text",
+                ) or ""
+            ).strip()
+        except Exception as e:
+            st.error(f"STT error: {e}")
+            st.stop()
+
+    if not user_text:
+        st.warning("No speech detected — please try again.")
+        st.stop()
+
+    st.session_state.transcript.append(("user", user_text, None))
+    st.session_state.messages.append({"role": "user", "content": user_text})
+    st.session_state.memory.add_turn("user", user_text)
+
+    # ② LLM — Groq LLaMA
+    with st.spinner("Thinking…"):
+        try:
+            response = _client.chat.completions.create(
+                model=LIVE_MODEL,
+                messages=st.session_state.messages,
+                max_tokens=256,
+                temperature=0.7,
+            )
+            reply = (response.choices[0].message.content or "").strip()
+        except Exception as e:
+            st.error(f"LLM error: {e}")
+            st.stop()
+
+    if reply:
+        st.session_state.messages.append({"role": "assistant", "content": reply})
+        st.session_state.memory.add_turn("agent", reply)
+
+        # ③ TTS — gTTS
+        with st.spinner("Generating speech…"):
+            try:
+                tts_buf = io.BytesIO()
+                gTTS(text=reply, lang="en").write_to_fp(tts_buf)
+                tts_buf.seek(0)
+                audio_bytes = tts_buf.read()
+            except Exception:
+                audio_bytes = None
+
+        st.session_state.transcript.append(("agent", reply, audio_bytes))
+
+        # Trim history: keep system prompt + last 40 messages (20 turns)
+        if len(st.session_state.messages) > 41:
+            st.session_state.messages = (
+                st.session_state.messages[:1]
+                + st.session_state.messages[-40:]
+            )
+
     st.rerun()
