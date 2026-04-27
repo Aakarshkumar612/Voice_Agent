@@ -165,7 +165,7 @@
 
 <div class="hero">
   <h1>JARVIS — Real-Time Voice AI Agent</h1>
-  <p class="sub">System Design Document &nbsp;·&nbsp; Last updated 2026-04-27 &nbsp;·&nbsp; Python 3.12 · Groq · Streamlit</p>
+  <p class="sub">System Design Document &nbsp;·&nbsp; Last updated 2026-04-28 &nbsp;·&nbsp; Python 3.12 · Groq · Streamlit</p>
   <div class="status-pill">✅ PROJECT COMPLETE — Fully Working</div>
   <div class="badge-row">
     <span class="badge blue">Python 3.12</span>
@@ -187,37 +187,161 @@
 
 <!-- ── OVERVIEW ──────────────────────────────────────────────────────────── -->
 <section id="overview">
-  <h2><span class="ico">📋</span> Project Overview</h2>
-  <div class="cards">
+  <h2><span class="ico">📋</span> Project Overview — Every Detail</h2>
+
+  <!-- Identity cards -->
+  <div class="cards" style="margin-bottom:2rem;">
     <div class="card">
       <div class="tag tag-blue">Purpose</div>
       <h3>What is JARVIS?</h3>
-      <p>A fully working real-time voice AI agent. You speak → it listens → it thinks → it speaks back. Complete end-to-end voice conversation with an LLM, no typing required.</p>
+      <p>A fully working real-time voice AI agent. Speak → mic captures 16 kHz PCM → VAD detects ≥320 ms of real speech (RMS &gt; 800, ≥5 frames) → Groq Whisper transcribes → Groq LLaMA reasons → pyttsx3 SAPI5 speaks back → echo flush clears mic → next turn. Complete hands-free voice loop. No typing required.</p>
     </div>
     <div class="card">
       <div class="tag tag-green">Use Case</div>
       <h3>Demo Booking Assistant</h3>
-      <p>Handles inbound voice queries: schedule product demos, check slot availability, and provide date/time — all via natural spoken conversation.</p>
+      <p>Handles inbound voice queries: schedule product demos (asks for name + date if not given), check slot availability on any date (4 fixed slots), report current time. Persona + 6 behavioral rules live in <code>prompts/system_prompt.txt</code>. Every reply ≤ 3 sentences — optimised for speech, not screens.</p>
     </div>
     <div class="card">
-      <div class="tag tag-blue">Interface</div>
+      <div class="tag tag-blue">Platform &amp; Repo</div>
+      <h3>Windows 11 / Python 3.12</h3>
+      <p>Developed and runs on Windows 11 (build 10.0.26200). Python 3.12 runtime. Virtual env: <code>voiceagent</code> (Miniconda / venv). TTS via Windows SAPI5. Repo: <code>HaRsH00000007/Voice_agent</code> · branch <code>main</code> · 3 commits. PyAudio wheel: <code>pipwin install pyaudio</code> if pip fails.</p>
+    </div>
+    <div class="card">
+      <div class="tag tag-green">Interface</div>
       <h3>Streamlit Web UI</h3>
-      <p>Browser-based control panel with live transcript display, session stats, real-time status indicator (Listening / Thinking / Speaking), and 0.7 s auto-refresh loop.</p>
+      <p>Sidebar: API key validation badge, Start/Stop buttons, 6 status states (Listening / Thinking / Speaking / Connecting / Error / Idle), how-to guide, 3 example phrases. Main: chat transcript via <code>st.chat_message</code>. Stats bar: total turns · you said · JARVIS replied. Auto-refreshes every 0.7 s via <code>time.sleep(0.7) + st.rerun()</code>.</p>
     </div>
     <div class="card">
-      <div class="tag tag-green">STT</div>
-      <h3>Groq Whisper</h3>
-      <p>Raw PCM audio from mic is wrapped in WAV and sent to Groq's <code>whisper-large-v3</code> — the most accurate open STT model, with Groq's sub-200 ms inference speed.</p>
+      <div class="tag tag-blue">STT</div>
+      <h3>Groq Whisper Large v3</h3>
+      <p>PCM bytes joined → WAV container built with <code>io.BytesIO + wave</code> (16 kHz, mono, Int16). Buffer given <code>.name = "audio.wav"</code> attribute for Groq SDK. Sent to <code>groq.audio.transcriptions.create(model="whisper-large-v3", response_format="text")</code>. Returns plain string. Errors caught + logged → returns <code>""</code> on failure, loop continues.</p>
     </div>
     <div class="card">
       <div class="tag tag-blue">LLM</div>
-      <h3>Groq LLaMA 3.3</h3>
-      <p><code>llama-3.3-70b-versatile</code> powers all conversation. Full multi-turn chat history maintained in-memory. Replies capped at 256 tokens for natural voice pacing.</p>
+      <h3>Groq LLaMA 3.3 70B</h3>
+      <p><code>llama-3.3-70b-versatile</code> via <code>groq.chat.completions.create()</code>. Full <code>messages[]</code> list passed on every call. System prompt pinned at index 0 — never trimmed. Bounded: system + last 40 messages (20 turns × 2). Hard params: <strong>max_tokens = 256</strong>, <strong>temperature = 0.7</strong>. Errors return <code>""</code> — turn skipped.</p>
     </div>
     <div class="card">
       <div class="tag tag-green">TTS</div>
-      <h3>pyttsx3 SAPI5</h3>
-      <p>Windows SAPI5 text-to-speech via pyttsx3 — fully offline, zero API cost, low latency. Voice rate tuned to 165 wpm for natural spoken cadence.</p>
+      <h3>pyttsx3 SAPI5 — Offline</h3>
+      <p>Windows SAPI5 engine via pyttsx3. Rate <strong>165 wpm</strong>, volume <strong>1.0</strong>. Engine is <em>re-created on every <code>_speak()</code> call</em> (<code>pyttsx3.init()</code> inside the method — not stored on the object). Fully offline, zero API cost. Output goes directly to Windows SAPI5 — does <strong>NOT</strong> route through <code>AudioHandler.output_queue</code>.</p>
+    </div>
+    <div class="card">
+      <div class="tag tag-gold">Threading Model</div>
+      <h3>3 Concurrent Threads</h3>
+      <p><strong>① Streamlit main</strong> — reruns every 0.7 s, drains <code>_transcript_q</code>, renders UI. <strong>② Agent daemon</strong> — private <code>asyncio</code> loop: VAD → STT → LLM → TTS → flush. <strong>③ PyAudio capture</strong> — always running, feeds <code>input_queue</code>. Bridge: module-level <code>_transcript_q</code> (Queue) + <code>_status</code> (dict + Lock) in <code>app.py</code>.</p>
+    </div>
+  </div>
+
+  <!-- Complete file inventory -->
+  <h3 style="margin-bottom:1rem;color:var(--text);font-size:1.1rem;">📁 Complete File Inventory</h3>
+  <div class="tbl-wrap" style="margin-bottom:2rem;">
+    <table>
+      <thead><tr><th>File</th><th>Lines</th><th>Role</th><th>Every Notable Detail</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>app.py</code></td><td>199</td><td>Streamlit UI + bridge</td>
+          <td>Module-level <code>_transcript_q</code> (Queue) + <code>_status</code> (dict + Lock); <code>_init_state()</code> bootstraps 5 session keys (running, audio, agent, memory, transcript); <code>_drain_queue()</code> on every rerun; <code>start_session()</code> / <code>stop_session()</code>; sidebar 6 status states; stats bar 3 metrics; 0.7 s <code>time.sleep + st.rerun()</code></td>
+        </tr>
+        <tr>
+          <td><code>config.py</code></td><td>20</td><td>All constants + env load</td>
+          <td><code>load_dotenv()</code>; GROQ_API_KEY; LIVE_MODEL=<code>llama-3.3-70b-versatile</code>; INPUT_SAMPLE_RATE=16000; <strong>OUTPUT_SAMPLE_RATE=24000</strong> (legacy output stream only); CHANNELS=1; CHUNK_SIZE=1024; SILENCE_THRESHOLD=800; MAX_HISTORY_TURNS=20; SYSTEM_PROMPT_PATH; <code>load_system_prompt()</code> with fallback string</td>
+        </tr>
+        <tr>
+          <td><code>core/agent.py</code></td><td>253</td><td>VoiceAgent — main pipeline</td>
+          <td>Module constants <strong>MIN_SPEECH_FRAMES=5</strong>, <strong>SILENCE_LIMIT=25</strong> (not in config.py); Groq client init; daemon thread + new private asyncio loop; <code>_main()</code> 5-step await loop; <code>_collect_speech()</code> VAD gate; <code>_transcribe()</code> PCM→WAV→Whisper; <code>_ask_groq()</code> messages→LLaMA (max_tokens=256, temp=0.7); <code>_speak()</code> pyttsx3 re-init per call; <code>_flush_mic_after_speaking()</code> 400ms+drain; LOG_FILE=<code>agent_error.log</code> truncated on start</td>
+        </tr>
+        <tr>
+          <td><code>core/audio.py</code></td><td>77</td><td>PyAudio hardware I/O</td>
+          <td>Dual PyAudio streams: input paInt16 16kHz, output paInt16 24kHz; capture thread reads CHUNK_SIZE=1024 with <code>exception_on_overflow=False</code> → <code>input_queue</code>; capture also checks RMS during <code>_speaking</code> flag for interrupt; <strong>playback thread reads <code>output_queue</code> — nothing writes to it (legacy, bypassed by pyttsx3)</strong>; <code>interrupt()</code> drains output_queue + clears _speaking</td>
+        </tr>
+        <tr>
+          <td><code>core/memory.py</code></td><td>30</td><td>Conversation history store</td>
+          <td>Turn @dataclass: role (str), text (str), timestamp (HH:MM:SS via <code>field(default_factory=...)</code>); threading.Lock; <code>add_turn()</code> appends + auto-trims to MAX_HISTORY_TURNS×2=40; <code>get_history()</code> returns immutable list copy; <code>clear()</code> resets. ⚠️ <code>add_turn()</code> IS called by agent, but <code>get_history()</code> is <strong>never called</strong> — agent manages its own <code>messages[]</code> in <code>_main()</code></td>
+        </tr>
+        <tr>
+          <td><code>core/tools.py</code></td><td>62</td><td>Tool registry + schema</td>
+          <td><code>book_demo(name, date, time="10:00 AM")</code> → booking_id = <code>DEMO-{abs(hash(name+date)) % 10000:04d}</code>; <code>check_slot_availability(date)</code> → 4 fixed slots ["9:00 AM","11:00 AM","2:00 PM","4:00 PM"]; <code>get_current_time()</code> → datetime.now; TOOL_REGISTRY dict; <code>dispatch(name, args)</code> with unknown-tool guard. ⚠️ <code>GROQ_TOOLS</code> (OpenAI-format schema) defined but <strong>NOT passed</strong> to <code>_ask_groq()</code> — function calling inactive</td>
+        </tr>
+        <tr>
+          <td><code>core/__init__.py</code></td><td>0</td><td>Package marker</td>
+          <td>Empty — makes <code>core/</code> a Python package for <code>from core.xxx import</code> imports</td>
+        </tr>
+        <tr>
+          <td><code>prompts/system_prompt.txt</code></td><td>10</td><td>JARVIS persona</td>
+          <td>Role: real-time demo booking assistant. Rule 1: ≤3 sentences (spoken aloud). Rule 2: friendly + conversational. Rule 3: ask name + date if not given when booking. Rule 4: list slots clearly and briefly. Rule 5: no markdown / asterisks / bullets / special characters. Rule 6: ask to repeat if unclear</td>
+        </tr>
+        <tr>
+          <td><code>requirements.txt</code></td><td>6</td><td>pip dependencies</td>
+          <td><code>groq</code>, <code>pyaudio</code>, <code>streamlit</code>, <code>python-dotenv</code>, <code>numpy</code>, <code>pyttsx3</code>. ⚠️ <strong><code>numpy</code> is listed but never imported</strong> in any source file — audioop (stdlib C-extension) handles all PCM math</td>
+        </tr>
+        <tr>
+          <td><code>.env.example</code></td><td>—</td><td>Env template</td>
+          <td>GROQ_API_KEY placeholder; user copies to <code>.env</code> and fills in key</td>
+        </tr>
+        <tr>
+          <td><code>agent_error.log</code></td><td>runtime</td><td>Error log</td>
+          <td>File truncated (open "w" then close) at every session start to clear stale entries; all STT / LLM / TTS exceptions + tracebacks appended; also mirrored to stdout via <code>print()</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- All config values -->
+  <h3 style="margin-bottom:1rem;color:var(--text);font-size:1.1rem;">⚙️ All Configuration Values — Complete Source of Truth</h3>
+  <div class="cfg" style="margin-bottom:2rem;">
+    <div class="cfg-item"><span class="key">GROQ_API_KEY</span><span class="v">.env — required</span></div>
+    <div class="cfg-item"><span class="key">LIVE_MODEL (config.py)</span><span class="v">llama-3.3-70b-versatile</span></div>
+    <div class="cfg-item"><span class="key">STT model (agent.py)</span><span class="v">whisper-large-v3</span></div>
+    <div class="cfg-item"><span class="key">INPUT_SAMPLE_RATE</span><span class="v">16 000 Hz — microphone</span></div>
+    <div class="cfg-item"><span class="key">OUTPUT_SAMPLE_RATE</span><span class="v">24 000 Hz — legacy stream</span></div>
+    <div class="cfg-item"><span class="key">CHANNELS</span><span class="v">1 — mono</span></div>
+    <div class="cfg-item"><span class="key">CHUNK_SIZE</span><span class="v">1 024 frames ≈ 64 ms</span></div>
+    <div class="cfg-item"><span class="key">SILENCE_THRESHOLD</span><span class="v">800 RMS (raised from 500)</span></div>
+    <div class="cfg-item"><span class="key">MIN_SPEECH_FRAMES (agent.py)</span><span class="v">5 frames ≈ 320 ms</span></div>
+    <div class="cfg-item"><span class="key">SILENCE_LIMIT (agent.py)</span><span class="v">25 frames ≈ 1.6 s</span></div>
+    <div class="cfg-item"><span class="key">MAX_HISTORY_TURNS</span><span class="v">20 turns → 40 messages</span></div>
+    <div class="cfg-item"><span class="key">LLM max_tokens (agent.py)</span><span class="v">256 tokens</span></div>
+    <div class="cfg-item"><span class="key">LLM temperature (agent.py)</span><span class="v">0.7</span></div>
+    <div class="cfg-item"><span class="key">TTS rate (agent.py)</span><span class="v">165 wpm</span></div>
+    <div class="cfg-item"><span class="key">TTS volume (agent.py)</span><span class="v">1.0</span></div>
+    <div class="cfg-item"><span class="key">MIC_FLUSH_DELAY (agent.py)</span><span class="v">400 ms post-TTS</span></div>
+    <div class="cfg-item"><span class="key">UI_REFRESH (app.py)</span><span class="v">0.7 s</span></div>
+    <div class="cfg-item"><span class="key">SYSTEM_PROMPT_PATH</span><span class="v">prompts/system_prompt.txt</span></div>
+  </div>
+
+  <!-- Technical notes / design gaps -->
+  <h3 style="margin-bottom:1rem;color:var(--text);font-size:1.1rem;">⚠️ Technical Notes &amp; Design Gaps</h3>
+  <div class="cards">
+    <div class="card" style="border-color:var(--gold);">
+      <div class="tag tag-gold">Gap 1 — Tools</div>
+      <h3>GROQ_TOOLS Defined But Not Wired</h3>
+      <p><code>core/tools.py</code> exports <code>GROQ_TOOLS</code> in OpenAI-compatible JSON schema, but <code>_ask_groq()</code> in <code>core/agent.py:229</code> does NOT pass <code>tools=GROQ_TOOLS</code> to the API call. <code>book_demo</code>, <code>check_slot_availability</code>, <code>get_current_time</code> are fully implemented — but JARVIS currently answers tool queries from LLM knowledge only, not actual function calls.</p>
+    </div>
+    <div class="card" style="border-color:var(--gold);">
+      <div class="tag tag-gold">Gap 2 — Memory</div>
+      <h3>ConversationMemory.get_history() Unused</h3>
+      <p><code>memory.add_turn()</code> IS called after each exchange (for logging/display). However <code>memory.get_history()</code> is never called by the agent. The actual LLM context lives in <code>messages[]</code> maintained directly in <code>_main()</code>. ConversationMemory is a parallel log — not the LLM's history source.</p>
+    </div>
+    <div class="card" style="border-color:var(--gold);">
+      <div class="tag tag-gold">Gap 3 — pyttsx3</div>
+      <h3>Engine Re-Init on Every Speak Call</h3>
+      <p><code>pyttsx3.init()</code> runs inside <code>_speak()</code> on every turn — creating and destroying the SAPI5 engine each response. Works reliably but adds ~50–100 ms overhead per turn. A persistent engine in <code>__init__</code> would reduce latency; re-init avoids cross-turn COM state leakage on Windows.</p>
+    </div>
+    <div class="card" style="border-color:var(--gold);">
+      <div class="tag tag-gold">Gap 4 — AudioHandler</div>
+      <h3>Legacy Output Stream / Playback Thread</h3>
+      <p><code>AudioHandler</code> opens a 24 kHz output stream and starts a playback thread consuming <code>output_queue</code>. Nothing writes to <code>output_queue</code> — pyttsx3 speaks via SAPI5 directly. The output stream, playback thread, and <code>interrupt()</code> drain logic are legacy scaffolding from the initial design and have zero functional impact.</p>
+    </div>
+    <div class="card" style="border-color:var(--gold);">
+      <div class="tag tag-gold">Gap 5 — numpy</div>
+      <h3>numpy Listed in requirements.txt But Unused</h3>
+      <p><code>numpy</code> appears in <code>requirements.txt</code> but is never imported in any source file. All PCM math is done via <code>audioop.rms()</code> (stdlib C-extension) and raw <code>bytes</code> operations. numpy can be removed from requirements without any functional impact.</p>
+    </div>
+    <div class="card" style="border-color:var(--gold);">
+      <div class="tag tag-gold">Gap 6 — VAD Constants</div>
+      <h3>MIN_SPEECH_FRAMES &amp; SILENCE_LIMIT Not in config.py</h3>
+      <p><code>MIN_SPEECH_FRAMES = 5</code> and <code>SILENCE_LIMIT = 25</code> are module-level constants defined directly in <code>core/agent.py</code>, not in <code>config.py</code>. To tune VAD timing you must edit <code>agent.py</code> directly — they are not exposed alongside the other audio config values.</p>
     </div>
   </div>
 </section>
@@ -719,6 +843,64 @@
       <div class="prog-item"><div class="dot dot-gold"></div><span>Unit + integration test suite (pytest-asyncio)</span></div>
       <div class="prog-item"><div class="dot dot-gold"></div><span>Docker containerisation + GitHub Actions CI</span></div>
       <div class="prog-item"><div class="dot dot-gold"></div><span>Deploy to Streamlit Community Cloud / Railway</span></div>
+      <div class="prog-item"><div class="dot dot-gold"></div><span>Move MIN_SPEECH_FRAMES + SILENCE_LIMIT to config.py</span></div>
+      <div class="prog-item"><div class="dot dot-gold"></div><span>Remove unused numpy from requirements.txt</span></div>
+      <div class="prog-item"><div class="dot dot-gold"></div><span>Activate GROQ_TOOLS — pass to _ask_groq() + add dispatch loop</span></div>
+      <div class="prog-item"><div class="dot dot-gold"></div><span>Persistent pyttsx3 engine in __init__ (reduce per-turn overhead)</span></div>
+    </div>
+  </div>
+
+  <!-- Code analysis findings table -->
+  <div style="margin-top:1.8rem;">
+    <h3 style="margin-bottom:1rem;color:var(--text);">🔍 Code Analysis Findings — Current State</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Finding</th><th>Location</th><th>Status</th><th>Impact</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>GROQ_TOOLS not passed to <code>_ask_groq()</code></td>
+            <td><code>core/agent.py:229</code></td>
+            <td style="color:var(--gold);">⚠️ Inactive</td>
+            <td>Tool calling defined but never invoked — JARVIS answers tool queries from LLM knowledge only</td>
+          </tr>
+          <tr>
+            <td><code>ConversationMemory.get_history()</code> never called</td>
+            <td><code>core/memory.py:23</code></td>
+            <td style="color:var(--gold);">⚠️ Unused</td>
+            <td>Memory logs turns for display but agent uses its own <code>messages[]</code> — no impact on conversation quality</td>
+          </tr>
+          <tr>
+            <td><code>pyttsx3.init()</code> inside <code>_speak()</code> per call</td>
+            <td><code>core/agent.py:243</code></td>
+            <td style="color:var(--blue);">ℹ️ By design</td>
+            <td>~50–100 ms overhead per turn; avoids COM state leakage; safe and stable on Windows</td>
+          </tr>
+          <tr>
+            <td>AudioHandler output_queue unused</td>
+            <td><code>core/audio.py:24, 65</code></td>
+            <td style="color:var(--blue);">ℹ️ Legacy</td>
+            <td>Playback thread running but idle; pyttsx3 bypasses it completely; no functional impact</td>
+          </tr>
+          <tr>
+            <td><code>OUTPUT_SAMPLE_RATE=24000</code> in config.py</td>
+            <td><code>config.py:10</code></td>
+            <td style="color:var(--blue);">ℹ️ Legacy</td>
+            <td>Used only for the legacy output stream — not relevant to pyttsx3 TTS path</td>
+          </tr>
+          <tr>
+            <td>numpy in requirements but not imported</td>
+            <td><code>requirements.txt:5</code></td>
+            <td style="color:var(--gold);">⚠️ Unused dep</td>
+            <td>Installs unnecessarily; can be removed; audioop (stdlib) handles all PCM math</td>
+          </tr>
+          <tr>
+            <td>MIN_SPEECH_FRAMES, SILENCE_LIMIT in agent.py not config.py</td>
+            <td><code>core/agent.py:34,38</code></td>
+            <td style="color:var(--blue);">ℹ️ Inconsistent</td>
+            <td>VAD timing constants not centrally configurable; must edit agent.py to tune</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </section>
@@ -904,7 +1086,7 @@
 <footer>
   <p style="font-size:1rem;color:var(--green);font-weight:600;">JARVIS — Real-Time Voice AI Agent &nbsp;·&nbsp; ✅ Complete</p>
   <p style="margin-top:.5rem;">Python 3.12 &nbsp;·&nbsp; Groq whisper-large-v3 (STT) &nbsp;·&nbsp; Groq llama-3.3-70b-versatile (LLM) &nbsp;·&nbsp; pyttsx3 SAPI5 (TTS) &nbsp;·&nbsp; Streamlit &nbsp;·&nbsp; PyAudio</p>
-  <p style="margin-top:.4rem;">Repo: <code>HaRsH00000007/Voice_agent</code> &nbsp;·&nbsp; Branch: <code>main</code> &nbsp;·&nbsp; Updated: 2026-04-27</p>
+  <p style="margin-top:.4rem;">Repo: <code>HaRsH00000007/Voice_agent</code> &nbsp;·&nbsp; Branch: <code>main</code> &nbsp;·&nbsp; Updated: 2026-04-28</p>
 </footer>
 
 </body>
