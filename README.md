@@ -3,8 +3,9 @@
 A fully working real-time voice AI agent built in Python. Speak → JARVIS transcribes, reasons, and replies aloud. End-to-end voice loop with no typing required.
 
 **Status:** ✅ Complete  
+**Live Demo:** [voiceagent-gflmqk26hgjsm6szsynrsp.streamlit.app](https://voiceagent-gflmqk26hgjsm6szsynrsp.streamlit.app/)  
 **Platform:** Windows 11 / Python 3.12  
-**Repo:** `HaRsH00000007/Voice_agent` · branch `main`  
+**Repo:** `Aakarshkumar612/Voice_Agent` · branch `main`  
 **Last updated:** 2026-04-28
 
 ---
