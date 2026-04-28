@@ -1,10 +1,7 @@
 """
 app.py — JARVIS Voice AI Agent
-Groq Whisper STT (English-forced) → Groq LLaMA → gTTS → st.audio autoplay
-
-No explicit st.rerun() after processing — the natural Streamlit rerun on the
-next audio_input submission handles state updates, which lets the browser fully
-load and play the audio before any re-render wipes the file from the media server.
+Session-based conversation: Start Session → mic loop → End Session
+Groq Whisper STT (en) → Groq LLaMA → gTTS → st.audio autoplay
 """
 
 import hashlib
@@ -26,6 +23,7 @@ def _init_state() -> None:
         "messages":        [{"role": "system", "content": load_system_prompt()}],
         "transcript":      [],
         "_processed_hash": None,
+        "session_active":  False,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -41,12 +39,37 @@ if not GROQ_API_KEY:
 _client = Groq(api_key=GROQ_API_KEY)
 
 st.title("🎙️ JARVIS")
-st.caption("Tap the mic → speak → tap Stop · JARVIS will reply in text and audio")
+st.caption("Your AI voice assistant")
 
-# ── Mic widget ─────────────────────────────────────────────────────────────────
-audio_value = st.audio_input("Your message")
+# ── Landing screen (no active session) ────────────────────────────────────────
+if not st.session_state.session_active:
+    st.write("")
+    st.write("Press **Start Session** to begin talking with JARVIS.")
+    st.write("Once the session starts, tap the mic, say anything, tap Stop — JARVIS will reply. Keep going as long as you like.")
+    st.write("")
+    if st.button("▶  Start Session", type="primary", use_container_width=True):
+        st.session_state.session_active = True
+        st.rerun()
+    st.stop()
 
-# ── Process only if this is a NEW recording ────────────────────────────────────
+# ── Active session header ──────────────────────────────────────────────────────
+col_status, col_end = st.columns([4, 1])
+with col_status:
+    st.success("Session active")
+with col_end:
+    if st.button("⏹ End", use_container_width=True):
+        st.session_state.session_active    = False
+        st.session_state.messages          = [{"role": "system", "content": load_system_prompt()}]
+        st.session_state.transcript        = []
+        st.session_state["_processed_hash"] = None
+        st.session_state.memory.clear()
+        st.rerun()
+
+# ── Mic widget — always at the top so it's one click away after every reply ───
+st.write("**Tap the mic, speak, then tap Stop:**")
+audio_value = st.audio_input("", label_visibility="collapsed")
+
+# ── Process only if this is a new recording ────────────────────────────────────
 if audio_value:
     audio_bytes = audio_value.getvalue()
     audio_hash  = hashlib.md5(audio_bytes).hexdigest()
@@ -54,8 +77,8 @@ if audio_value:
     if st.session_state["_processed_hash"] != audio_hash:
         st.session_state["_processed_hash"] = audio_hash
 
-        # ① STT — force English so Whisper never switches languages
-        with st.spinner("Transcribing…"):
+        # ① STT — language="en" prevents Whisper from switching languages
+        with st.spinner("Listening…"):
             try:
                 buf      = io.BytesIO(audio_bytes)
                 buf.name = "audio.wav"
@@ -78,13 +101,13 @@ if audio_value:
             st.session_state.transcript.append(("user", user_text))
             st.session_state.memory.add_turn("user", user_text)
 
-            # ② LLM
+            # ② LLM — 1024 tokens allows full 15-20 sentence answers
             with st.spinner("Thinking…"):
                 try:
                     resp = _client.chat.completions.create(
                         model=LIVE_MODEL,
                         messages=st.session_state.messages,
-                        max_tokens=300,
+                        max_tokens=1024,
                         temperature=0.7,
                     )
                     reply = (resp.choices[0].message.content or "").strip()
@@ -97,27 +120,25 @@ if audio_value:
                 st.session_state.transcript.append(("agent", reply))
                 st.session_state.memory.add_turn("agent", reply)
 
-                # Keep context window bounded
                 if len(st.session_state.messages) > 41:
                     st.session_state.messages = (
                         st.session_state.messages[:1] + st.session_state.messages[-40:]
                     )
 
-                # ③ TTS — render audio player immediately in this render pass.
-                # No st.rerun() is called, so the media file stays alive long
-                # enough for the browser to fetch and play it.
+                # ③ TTS — rendered in this pass; no st.rerun() so the file
+                #    stays alive long enough for the browser to fetch and play it
                 try:
                     tts_buf = io.BytesIO()
                     gTTS(text=reply, lang="en").write_to_fp(tts_buf)
                     st.audio(tts_buf.getvalue(), format="audio/mp3", autoplay=True)
                 except Exception as e:
-                    st.warning(f"Audio generation failed: {e}")
+                    st.warning(f"Audio unavailable: {e}")
 
 # ── Conversation transcript ────────────────────────────────────────────────────
 st.divider()
 
 if not st.session_state.transcript:
-    st.info("Your conversation will appear here. Tap the mic above to start.")
+    st.info("Your conversation will appear here once you start speaking.")
 
 for role, text in st.session_state.transcript:
     if role == "user":
@@ -126,13 +147,3 @@ for role, text in st.session_state.transcript:
     else:
         with st.chat_message("assistant", avatar="🎙️"):
             st.write(text)
-
-# ── Clear ──────────────────────────────────────────────────────────────────────
-if st.session_state.transcript:
-    st.divider()
-    if st.button("🗑️ Clear conversation"):
-        st.session_state.messages          = [{"role": "system", "content": load_system_prompt()}]
-        st.session_state.transcript        = []
-        st.session_state["_processed_hash"] = None
-        st.session_state.memory.clear()
-        st.rerun()
